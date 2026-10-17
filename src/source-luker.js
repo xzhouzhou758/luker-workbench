@@ -400,3 +400,240 @@ export async function aiTest(role) {
     await aiRequest(role, { messages: [{ role: 'system', content: '这是连接测试。调用 wb_ok 工具一次，不要输出别的。' }, { role: 'user', content: '测试连接' }], tools });
     return Date.now() - started;
 }
+
+// ---------------------------------------------------------------------------
+// 问问: read-only readers (one per AI tool) + the overview sent first
+// ---------------------------------------------------------------------------
+
+const loadLogs = lazy('/scripts/frontend-log-manager.js');
+
+async function inspectorList() {
+    const res = await fetch('/api/request-inspector/list', { headers: getContext().getRequestHeaders?.() });
+    if (!res.ok) throw new SourceError('inspector', `请求检查器读不到（HTTP ${res.status}）`);
+    const list = await res.json();
+    return Array.isArray(list) ? list : [];
+}
+
+export async function inspectorDetail(id) {
+    const res = await fetch(`/api/request-inspector/${encodeURIComponent(id)}`, { headers: getContext().getRequestHeaders?.() });
+    if (!res.ok) throw new SourceError('inspector', `这条请求读不到（HTTP ${res.status}）`);
+    return res.json();
+}
+
+/** Request list, newest first, with a guessed source. */
+export async function listRequests({ limit = 60 } = {}) {
+    const { attribute } = await import('./model/requests.js');
+    const list = (await inspectorList()).sort((a, b) => b.timestamp - a.timestamp).slice(0, limit);
+    return list.map(e => ({ ...e, attr: attribute(e) }));
+}
+
+export function frontendLogs({ limit = 60, level = 'all', search = '' } = {}) {
+    return loadLogs().then((mod) => {
+        if (typeof mod?.getFrontendLogsSnapshot !== 'function') throw new SourceError('logs', '前端日志读不到');
+        const levels = level === 'error' ? ['error'] : level === 'warn' ? ['warn', 'error'] : null;
+        const needle = String(search || '').toLowerCase();
+        const all = mod.getFrontendLogsSnapshot({ limit: 3000 }).entries || [];
+        return all
+            .filter(e => !levels || levels.includes(String(e.level)))
+            .filter(e => !needle || String(e.message || '').toLowerCase().includes(needle))
+            .slice(-Math.max(1, Math.min(200, limit)))
+            .map(e => ({ time: new Date(e.timestamp).toLocaleTimeString('zh-CN', { hour12: false }), level: e.level, source: e.source, message: String(e.message || '').slice(0, 800) }));
+    });
+}
+
+export function frontendLogCount() {
+    return loadLogs().then(mod => mod?.getFrontendLogsSnapshot?.({ limit: 3000 }).entries?.length ?? null).catch(() => null);
+}
+
+/** Whether Luker's 「前端调试日志」 switch is on (API request logs are only kept then). */
+export function debugLoggingOn() {
+    const box = document.getElementById('frontend_debug_logging');
+    if (box) return Boolean(box.checked);
+    return null;
+}
+
+/** Turns the switch on through Luker's own control, so it is saved like a user click. */
+export function enableDebugLogging() {
+    const box = document.getElementById('frontend_debug_logging');
+    if (!box) throw new SourceError('logs', '找不到「前端调试日志」开关，请在用户设置里手动打开');
+    if (!box.checked) {
+        box.checked = true;
+        box.dispatchEvent(new Event('input', { bubbles: true }));
+        box.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    return true;
+}
+
+export async function serverLogs({ limit = 60, search = '' } = {}) {
+    const res = await fetch('/api/users/logs/get', {
+        method: 'POST',
+        headers: getContext().getRequestHeaders?.(),
+        body: JSON.stringify({ limit: Math.max(1, Math.min(200, limit)), searchTerm: String(search || '') }),
+    });
+    if (res.status === 403 || res.status === 401) throw new SourceError('logs', '服务器日志需要管理员权限');
+    if (!res.ok) throw new SourceError('logs', `服务器日志读不到（HTTP ${res.status}）`);
+    const data = await res.json();
+    const entries = Array.isArray(data?.entries) ? data.entries : Array.isArray(data) ? data : [];
+    return entries.map(e => ({ time: new Date(Number(e.timestamp) || Date.now()).toLocaleTimeString('zh-CN', { hour12: false }), level: e.level, message: String(e.message || '').slice(0, 800) }));
+}
+
+function chatMessages({ from, to } = {}) {
+    const chat = Array.isArray(getContext().chat) ? getContext().chat : [];
+    const last = chat.length - 1;
+    const start = Number.isFinite(Number(from)) ? Math.max(0, Number(from)) : Math.max(0, last - 3);
+    const end = Number.isFinite(Number(to)) ? Math.min(last, Number(to)) : Math.min(last, start + 5);
+    const out = [];
+    for (let i = start; i <= end && i <= last; i++) {
+        const m = chat[i];
+        if (!m) continue;
+        out.push({ floor: i, who: m.is_user ? '用户' : m.is_system ? '系统' : (m.name || '角色'), text: String(m.mes || '').slice(0, 4000), model: m.extra?.model || '' });
+    }
+    return { total: chat.length, messages: out };
+}
+
+function characterFields({ fields } = {}) {
+    const ctx = getContext();
+    const c = currentCharacter(ctx);
+    if (!c) return { error: '未选择角色卡（或在群聊里）' };
+    const full = ctx.characters[c.index] || {};
+    const data = full.data || {};
+    const all = {
+        name: full.name,
+        description: full.description ?? data.description,
+        personality: full.personality ?? data.personality,
+        scenario: full.scenario ?? data.scenario,
+        first_mes: full.first_mes ?? data.first_mes,
+        mes_example: full.mes_example ?? data.mes_example,
+        creator_notes: data.creator_notes,
+        system_prompt: data.system_prompt,
+        post_history_instructions: data.post_history_instructions,
+        world: data.extensions?.world || '',
+    };
+    const want = Array.isArray(fields) && fields.length ? fields : Object.keys(all);
+    return Object.fromEntries(want.filter(k => k in all).map(k => [k, String(all[k] ?? '').slice(0, 6000)]));
+}
+
+export async function boundBooks(ctx = getContext()) {
+    const names = new Set();
+    const c = currentCharacter(ctx);
+    if (c) {
+        const full = ctx.characters[c.index];
+        if (full?.data?.extensions?.world) names.add(String(full.data.extensions.world));
+        try { for (const n of ctx.getCharaAuxWorlds?.(full?.avatar?.replace(/\.[^.]+$/, '')) || []) names.add(String(n)); } catch { /* ignore */ }
+    }
+    try { for (const n of ctx.chatWorldInfo?.getNames?.() || []) names.add(String(n)); } catch { /* ignore */ }
+    try { for (const n of ctx.chatWorldInfo?.globalSelection || []) names.add(String(n)); } catch { /* ignore */ }
+    return [...names].filter(Boolean);
+}
+
+async function worldInfo({ search = '' } = {}) {
+    const ctx = getContext();
+    const books = await boundBooks(ctx);
+    const needle = String(search || '').toLowerCase();
+    const out = [];
+    for (const name of books) {
+        let data = null;
+        try { data = await ctx.loadWorldInfo?.(name); } catch { data = null; }
+        const entries = Object.values(data?.entries || {});
+        for (const e of entries) {
+            const keys = [...(e.key || []), ...(e.keysecondary || [])].map(String);
+            const hay = `${keys.join(' ')} ${e.comment || ''} ${e.content || ''}`.toLowerCase();
+            if (needle && !hay.includes(needle)) continue;
+            out.push({ book: name, title: e.comment || keys[0] || `#${e.uid}`, keys, enabled: !e.disable, constant: Boolean(e.constant), content: needle ? String(e.content || '').slice(0, 1500) : undefined });
+            if (out.length >= 60) break;
+        }
+    }
+    return { books, entries: out };
+}
+
+function presetDetail({ entry = '' } = {}) {
+    const ctx = getContext();
+    const live = ctx.presets?.getLive?.('openai');
+    const body = live?.body || {};
+    const order = (body.prompt_order || []).find(o => Number(o.character_id) === 100001) || (body.prompt_order || [])[0];
+    const byId = new Map((body.prompts || []).map(p => [p.identifier, p]));
+    const items = (order?.order || []).map(o => ({ ...byId.get(o.identifier), enabled: o.enabled })).filter(p => p.identifier);
+    if (entry) {
+        const hit = items.find(p => p.name === entry || p.identifier === entry);
+        return hit ? { name: hit.name, enabled: hit.enabled, role: hit.role, content: String(hit.content || '').slice(0, 8000) } : { error: `没有叫「${entry}」的条目` };
+    }
+    return {
+        name: live?.ref?.name || '',
+        settings: { temperature: body.temperature, max_context: body.openai_max_context, max_tokens: body.openai_max_tokens, stream: body.stream_openai },
+        entries: items.map(p => ({ name: p.name || p.identifier, enabled: p.enabled, marker: Boolean(p.marker), preview: p.marker ? '（系统占位：角色卡 / 世界书 / 聊天等）' : String(p.content || '').slice(0, 120) })),
+    };
+}
+
+async function memoryDetail({ part = 'summary' } = {}) {
+    const ctx = getContext();
+    const mg = ctx.getExtensionApi?.('memory-graph');
+    if (!mg) return { error: '没有记忆图' };
+    const proj = await mg.getLastRecallProjection?.(ctx);
+    if (part === 'core') return String(proj?.blocks?.corePacket || '（空）');
+    if (part === 'focus') return String(proj?.blocks?.focusPacket || '（空）');
+    const snap = await memoryPart(ctx, chatInfo(ctx));
+    return { ...snap, lastRecall: proj?.at ? new Date(proj.at).toLocaleString('zh-CN') : '还没召回过' };
+}
+
+/** Reader functions keyed by tool name (see model/ask.js). */
+export function askReaders({ redactText = true, suggestions = () => [] } = {}) {
+    const R = async (value) => {
+        if (!redactText) return value;
+        const { redact } = await import('./model/requests.js');
+        return JSON.parse(redact(JSON.stringify(value)));
+    };
+    return {
+        async wb_list_requests({ limit = 20, only_errors = false } = {}) {
+            const { describeRequest } = await import('./model/requests.js');
+            const list = await listRequests({ limit: 200 });
+            const pick = list.filter(e => !only_errors || e.status === 'error' || e.error).slice(0, Math.max(1, Math.min(60, limit)));
+            return R(pick.map(e => describeRequest(e, e.attr)));
+        },
+        async wb_read_request({ id, part = 'both' } = {}) {
+            const d = await inspectorDetail(id);
+            const msgs = (d.fullMessages || []).map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content.slice(0, 3000) : JSON.stringify(m.content).slice(0, 3000) }));
+            const out = { id: d.id, model: d.model, status: d.status, httpStatus: d.httpStatus, error: d.error, durationMs: d.durationMs, usage: d.usage, finishReason: d.finishReason };
+            if (part !== 'reply') out.messages = msgs;
+            if (part !== 'messages') out.reply = String(d.responseText || '').slice(0, 6000);
+            return R(out);
+        },
+        wb_read_frontend_logs: async (args) => R(await frontendLogs(args)),
+        wb_read_server_logs: async (args) => R(await serverLogs(args)),
+        wb_read_chat: async (args) => chatMessages(args),
+        wb_read_character: async (args) => characterFields(args),
+        wb_read_world_info: async (args) => worldInfo(args),
+        wb_read_preset: async (args) => presetDetail(args),
+        async wb_read_last_prompt() {
+            const snap = await loadSnapshot();
+            return snap.budget || { error: '还没有提示词数据（要先生成一次回复，且是对话补全接口）' };
+        },
+        wb_read_memory: async (args) => memoryDetail(args),
+        async wb_read_orchestrator() {
+            const o = orchPart(getContext());
+            return o ? { enabled: o.enabled, mode: o.mode, runs: o.runs.slice(-8) } : { error: '没有编排' };
+        },
+        wb_read_suggestions: async () => suggestions().map(s => ({ text: s.text, why: s.why })),
+    };
+}
+
+/** Compact overview sent with every question. */
+export async function askOverview() {
+    const ctx = getContext();
+    const snap = await loadSnapshot();
+    let requests = [];
+    try {
+        const { describeRequest } = await import('./model/requests.js');
+        requests = (await listRequests({ limit: 8 })).map(e => describeRequest(e, e.attr));
+    } catch { requests = '读不到'; }
+    return {
+        聊天: snap.chat.label ? `${snap.chat.label}，${snap.chat.floors} 楼` : '没有打开聊天',
+        角色卡: snap.card?.name || '未选择',
+        预设: snap.preset?.name || '',
+        连接: snap.connection,
+        提示词: snap.budget ? Object.fromEntries([['合计', snap.budget.total], ['上限', snap.budget.max], ...snap.budget.parts.map(p => [p.label, p.tokens])]) : '没有数据',
+        记忆图: snap.memory ? { 节点: snap.memory.nodes, 常驻注入: snap.memory.core, 本次召回: snap.memory.focus } : '没有',
+        编排: snap.orch ? { 开启: snap.orch.enabled, 模式: snap.orch.mode, 最近运行: snap.orch.runs.length } : '没有',
+        最近的请求: requests,
+        调试日志开关: debugLoggingOn() === null ? '未知' : debugLoggingOn() ? '开' : '关',
+    };
+}
