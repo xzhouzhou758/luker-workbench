@@ -1,0 +1,126 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// 设置: AI connections (connection profile and generation preset chosen
+// separately, a default row plus one row per workbench), 问问 sources,
+// window, and the 小建议 rules with their conditions.
+
+import { h, put, clear } from '../util.js';
+import { button, link, dot, checkRow, select, sectionTitle, loading } from '../ui/components.js';
+import { RULES } from '../model/suggest.js';
+
+const ROWS = [
+    { key: 'ask', label: '问问', tone: 'other' },
+    { key: 'memory', label: '记忆图', tone: 'memory' },
+    { key: 'orch', label: '编排', tone: 'orch' },
+    { key: 'preset', label: '预设', tone: 'preset' },
+    { key: 'card', label: '角色卡', tone: 'card' },
+];
+const SOURCES = [
+    { key: 'inspector', name: '请求检查器', note: '最近 200 次请求的完整内容、用时、状态' },
+    { key: 'frontLogs', name: '前端日志', note: '浏览器控制台输出，刷新页面后清空' },
+    { key: 'serverLogs', name: '服务器日志', note: '开了多用户时只有管理员能读' },
+    { key: 'content', name: '当前内容', note: '聊天、角色卡、世界书、预设、连接配置' },
+    { key: 'plugins', name: '插件', note: '记忆图、编排、token 记录、小建议' },
+];
+
+export function createSettingsPage(app) {
+    const el = h('div', { class: 'wb-page' });
+    let choices = null;
+    let testing = '';
+
+    async function ensureChoices() {
+        if (choices) return;
+        try { choices = await app.source.listAiChoices(); } catch { choices = { connections: [], presets: [] }; }
+        paint();
+    }
+
+    function edit(mutate) {
+        const next = structuredClone(app.settings());
+        mutate(next);
+        app.saveSettings(next);
+    }
+
+    function aiTable() {
+        const s = app.settings();
+        if (!choices) return loading('读取连接配置…');
+        const opts = (list, first) => [{ value: '', label: first }, ...list.map(name => ({ value: name, label: name }))];
+        const row = (key, label, tone, isDefault = false) => {
+            const cur = s.ai?.[key] || {};
+            const first = isDefault ? '用 Luker 当前的' : '跟随默认';
+            return h('tr', null,
+                h('td', null, tone ? dot(tone) : null, isDefault ? h('b', { text: label }) : h('span', { text: label })),
+                h('td', null, select(opts(choices.connections, first), cur.connection || '', (v) => edit(n => { n.ai[key].connection = v; }), { ariaLabel: `${label} 连接配置`, follow: true })),
+                h('td', null, select(opts(choices.presets, first), cur.preset || '', (v) => edit(n => { n.ai[key].preset = v; }), { ariaLabel: `${label} 生成预设`, follow: true })));
+        };
+        return h('div', { class: 'wb-list' }, h('table', { class: 'wb-api' },
+            h('thead', null, h('tr', null, h('th'), h('th', { text: '连接配置' }), h('th', { text: '生成预设' }))),
+            h('tbody', null, row('default', '默认', '', true), ROWS.map(r => row(r.key, r.label, r.tone)))));
+    }
+
+    async function test() {
+        testing = 'running';
+        paint();
+        try {
+            const ms = await app.source.aiTest('ask');
+            app.toast(`连接正常，用时 ${(ms / 1000).toFixed(1)} 秒`);
+        } catch (err) {
+            app.toast(`连接失败：${err?.message || err}`, { error: true, duration: 6000 });
+        }
+        testing = '';
+        paint();
+    }
+
+    function paint() {
+        clear(el);
+        const s = app.settings();
+        put(el,
+            h('div', null, h('h2', { class: 'wb-h2', text: '设置' }), h('p', { class: 'wb-sub', text: 'AI 接口统一选一次，问问和四个工作台共用；也可以单独给某一项换。' })),
+            h('section', null,
+                sectionTitle('AI 接口', testing ? h('span', { class: 'wb-note', text: '测试中…' }) : link('测试默认', () => test())),
+                aiTable(),
+                h('p', { class: 'wb-note wb-api-note', text: '连接配置决定用哪个模型、哪个地址；生成预设决定请求外面包的提示词（破限内容在这里，会照常带上）。两项都来自 Luker 自己的列表，工作台只是选用，不会改动它们。' }),
+                h('div', { class: 'wb-checks' },
+                    checkRow({ checked: s.builtinPrompt, label: '使用内置的迭代提示词', note: '告诉 AI 这是在改设定，不是写故事，避免预设的文风干扰', onChange: (v) => edit(n => { n.builtinPrompt = v; }) }),
+                    checkRow({ checked: s.reviewChanges, label: '改动先给我看，不要直接应用', onChange: (v) => edit(n => { n.reviewChanges = v; }) }))),
+            h('section', null,
+                sectionTitle('问问'),
+                h('div', { class: 'wb-list' },
+                    SOURCES.map(src => setRow(src.name, src.note, checkRow({ checked: s.ask.sources[src.key] !== false, label: '读取', onChange: (v) => edit(n => { n.ask.sources[src.key] = v; }) }))),
+                    setRow('聊天原文最多带几楼', '问到某条回复时，连同前后几楼一起发给 AI',
+                        select([{ value: '2', label: '前后各 2 楼' }, { value: '0', label: '只带那一楼' }, { value: '5', label: '前后各 5 楼' }], String(s.ask.floors), (v) => edit(n => { n.ask.floors = Number(v); }), { ariaLabel: '聊天原文楼数' }))),
+                h('div', { class: 'wb-checks' },
+                    checkRow({ checked: s.ask.previewBeforeSend, label: '发给 AI 前先给我看', onChange: (v) => edit(n => { n.ask.previewBeforeSend = v; }) }),
+                    checkRow({ checked: s.ask.redact, label: '发出去之前去掉 API key 和地址', onChange: (v) => edit(n => { n.ask.redact = v; }) }))),
+            h('section', null,
+                sectionTitle('窗口'),
+                h('div', { class: 'wb-list' },
+                    setRow('快捷键', '也可以从魔杖菜单打开', select([{ value: 'alt+w', label: 'Alt + W' }, { value: '', label: '不用快捷键' }], s.hotkey, (v) => edit(n => { n.hotkey = v; }), { ariaLabel: '快捷键' })),
+                    setRow('窗口位置和大小', '拖动标题栏移动，右下角拉大小，双击标题栏放大', button('恢复默认', () => { try { localStorage.removeItem('workbench.prefs.v1'); } catch { /* ignore */ } app.toast('下次打开时生效'); }, { className: 'is-sm' })))),
+            rulesSection());
+    }
+
+    function rulesSection() {
+        const s = app.settings();
+        const dismissedCount = Object.keys(s.dismissed || {}).length;
+        return h('section', { id: 'wb-rules' },
+            sectionTitle('小建议', dismissedCount ? link(`恢复已忽略的 ${dismissedCount} 条`, () => edit(n => { n.dismissed = {}; })) : null),
+            h('p', { class: 'wb-sub wb-rules-intro' }, '都是固定的规则，在本地检查记忆图、编排、预设和角色卡的数据和设置，', h('b', { text: '不调用 AI，不花 token' }), '。打开工作台、或者每次生成回复后检查一遍。点「让 AI 看看」时才会真正调用 AI。'),
+            h('div', { class: 'wb-list' }, RULES.map(rule => h('div', { class: 'wb-rule' },
+                dot(rule.tone),
+                h('div', { class: 'wb-rule-main' }, h('div', { text: rule.name }), h('div', { class: 'wb-note', text: rule.when })),
+                checkRow({ checked: s.rules[rule.id] ?? rule.defaultOn, ariaLabel: rule.name, onChange: (v) => edit(n => { n.rules[rule.id] = v; }) })))));
+    }
+
+    function setRow(name, note, control) {
+        return h('div', { class: 'wb-setrow' }, h('div', null, h('div', { class: 'wb-setrow-name', text: name }), note ? h('div', { class: 'wb-note', text: note }) : null), control);
+    }
+
+    return {
+        el,
+        show(opts = {}) {
+            paint();
+            ensureChoices();
+            if (opts.scrollTo === 'rules') requestAnimationFrame(() => el.querySelector('#wb-rules')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+        },
+    };
+}

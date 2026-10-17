@@ -1,0 +1,12 @@
+{
+    "name": "luker-workbench",
+    "version": "0.1.0",
+    "private": true,
+    "description": "One floating window for Luker's AI workbenches: overview, ask, iterate, history.",
+    "license": "AGPL-3.0-or-later",
+    "type": "module",
+    "scripts": {
+        "test": "node --test \"tests/*.test.mjs\"",
+        "preview": "node preview/serve.mjs"
+    }
+}

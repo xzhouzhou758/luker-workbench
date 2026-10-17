@@ -1,0 +1,677 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>工作台 · 样稿 v2</title>
+<!-- 静态样稿：假数据，按钮只演示交互，不连接 Luker。 -->
+<style>
+:root {
+    --font: "Inter", "SF Pro Text", system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    --mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
+    --r-sm: 6px; --r: 8px; --r-lg: 14px;
+    --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.wb { font-family: var(--font); font-size: 13px; color: var(--text); }
+.wb[data-theme="dark"] {
+    color-scheme: dark;
+    --surface: #141519; --surface-2: #191b20; --raised: #1f2127;
+    --hover: rgba(255,255,255,.045); --active: rgba(255,255,255,.08);
+    --border: rgba(255,255,255,.07); --border-strong: rgba(255,255,255,.13);
+    --text: #e9eaed; --muted: #9da1ab; --faint: #676b74;
+    --accent: #3fd0b4; --accent-soft: rgba(63,208,180,.14); --accent-text: #062a23;
+    --amber: #f4b740; --blue: #6fb3f2; --danger: #ef7d6e;
+    --t-memory: #f4b740; --t-orch: #b99af7; --t-preset: #6fb3f2; --t-card: #ff8f6b;
+    --shadow: 0 30px 80px -20px rgba(0,0,0,.8), 0 0 0 1px rgba(255,255,255,.08);
+}
+.wb[data-theme="light"] {
+    color-scheme: light;
+    --surface: #ffffff; --surface-2: #f6f7f9; --raised: #ffffff;
+    --hover: rgba(15,20,30,.04); --active: rgba(15,20,30,.07);
+    --border: rgba(15,20,30,.08); --border-strong: rgba(15,20,30,.15);
+    --text: #1b1d22; --muted: #5d626d; --faint: #9196a0;
+    --accent: #12a58a; --accent-soft: rgba(18,165,138,.11); --accent-text: #ffffff;
+    --amber: #c98500; --blue: #2f7fd0; --danger: #d4553f;
+    --t-memory: #c98500; --t-orch: #8a63e0; --t-preset: #2f7fd0; --t-card: #e0643f;
+    --shadow: 0 30px 70px -24px rgba(20,25,40,.35), 0 0 0 1px rgba(15,20,30,.08);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { font-family: var(--font); overflow: hidden; }
+button { font: inherit; color: inherit; }
+
+/* ---- 假的 Luker 背景（只为看出“窗口化”） ---- */
+.host { position: fixed; inset: 0; display: grid; grid-template-rows: 44px 1fr; background: #2a2c31; color: #c9cbd0; }
+.host-top { display: flex; align-items: center; gap: 14px; padding: 0 16px; background: #1e2024; border-bottom: 1px solid #000; font-size: 13px; }
+.host-top b { color: #fff; }
+.host-chat { overflow: hidden; padding: 24px max(24px, 12vw); display: flex; flex-direction: column; gap: 14px; }
+.host-msg { max-width: 720px; padding: 12px 16px; border-radius: 10px; background: rgba(255,255,255,.05); line-height: 1.7; font-size: 14px; }
+.host-msg.me { align-self: flex-end; background: rgba(90,140,255,.14); }
+.host-msg small { display: block; color: #8b8e96; font-size: 12px; margin-bottom: 2px; }
+.host-hint { position: fixed; left: 16px; bottom: 14px; font-size: 12px; color: #8b8e96; }
+.host-hint kbd { font-family: var(--mono); font-size: 11px; padding: 1px 5px; border: 1px solid #555; border-radius: 4px; }
+
+/* ---- 窗口 ---- */
+.win {
+    position: fixed; z-index: 10; left: 50%; top: 50%;
+    width: min(900px, calc(100vw - 32px)); height: min(600px, calc(100vh - 80px));
+    transform: translate(-50%, -50%);
+    display: flex; flex-direction: column; min-width: 560px; min-height: 380px;
+    border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--shadow);
+    overflow: hidden; resize: both;
+    animation: win-in 220ms var(--ease);
+}
+@keyframes win-in { from { opacity: 0; transform: translate(-50%, -48%) scale(.98); } }
+.win.is-max { left: 12px !important; top: 56px !important; width: calc(100vw - 24px) !important; height: calc(100vh - 68px) !important; transform: none; resize: none; }
+.win.is-min { display: none; }
+.titlebar {
+    flex: none; display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 8px 0 14px;
+    border-bottom: 1px solid var(--border); background: var(--surface-2); cursor: grab; user-select: none;
+}
+.titlebar:active { cursor: grabbing; }
+.mark { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); }
+.title { font-weight: 650; font-size: 13.5px; }
+.title-ctx { color: var(--muted); font-size: 12.5px; padding-left: 10px; border-left: 1px solid var(--border-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.spacer { flex: 1; }
+.ibtn { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: var(--r-sm); background: none; color: var(--muted); cursor: pointer; }
+.ibtn:hover { background: var(--hover); color: var(--text); }
+.ibtn svg { width: 16px; height: 16px; }
+.ibtn.close:hover { background: var(--danger); color: #fff; }
+
+.wbody { flex: 1; display: flex; min-height: 0; }
+.rail { flex: none; width: 168px; padding: 10px 8px; border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; overflow: auto; }
+.rail-label { padding: 10px 8px 4px; font-size: 11px; color: var(--faint); }
+.tab {
+    display: flex; align-items: center; gap: 9px; width: 100%; height: 34px; padding: 0 10px;
+    border: 0; border-radius: var(--r-sm); background: none; color: var(--muted); cursor: pointer; text-align: left;
+}
+.tab:hover { background: var(--hover); color: var(--text); }
+.tab[aria-selected="true"] { background: var(--active); color: var(--text); font-weight: 600; }
+.tab svg { width: 16px; height: 16px; flex: none; }
+.tab .dot { width: 8px; height: 8px; border-radius: 3px; flex: none; }
+.tab .badge { margin-left: auto; font-size: 11px; font-weight: 500; color: var(--faint); font-variant-numeric: tabular-nums; }
+.rail-foot { margin-top: auto; }
+
+.main { flex: 1; min-width: 0; overflow: auto; padding: 18px 20px 24px; }
+.page { display: none; flex-direction: column; gap: 18px; }
+.page.is-on { display: flex; animation: page-in 180ms var(--ease); }
+@keyframes page-in { from { opacity: 0; transform: translateY(4px); } }
+.h2 { margin: 0; font-size: 15px; font-weight: 650; }
+.sub { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
+.sec-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 12px; color: var(--faint); }
+.link { border: 0; background: none; padding: 0; color: var(--accent); font-size: 12px; cursor: pointer; }
+
+/* 工作台卡片 */
+.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.card {
+    position: relative; display: flex; flex-direction: column; gap: 10px; padding: 14px;
+    border: 1px solid var(--border); border-radius: var(--r); background: var(--surface);
+    transition: border-color 160ms, transform 160ms var(--ease);
+}
+.card:hover { border-color: var(--border-strong); transform: translateY(-1px); }
+.card::before { content: ''; position: absolute; left: 0; top: 14px; bottom: 14px; width: 3px; border-radius: 0 3px 3px 0; background: var(--tone); }
+.card-head { display: flex; align-items: center; gap: 10px; }
+.card-icon { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; color: var(--tone); background: color-mix(in srgb, var(--tone) 14%, transparent); }
+.card-icon svg { width: 17px; height: 17px; }
+.card-name { font-weight: 650; font-size: 13.5px; }
+.card-by { font-size: 11.5px; color: var(--faint); }
+.pill { margin-left: auto; padding: 2px 8px; border-radius: 999px; font-size: 11px; background: var(--hover); color: var(--muted); white-space: nowrap; }
+.pill.ok { background: var(--accent-soft); color: var(--accent); }
+.pill.warn { background: color-mix(in srgb, var(--amber) 16%, transparent); color: var(--amber); }
+.card-stat { display: flex; gap: 14px; font-size: 12px; color: var(--muted); }
+.card-stat b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.card-actions { display: flex; gap: 6px; }
+.btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 30px; padding: 0 12px;
+    border: 1px solid var(--border-strong); border-radius: var(--r-sm); background: var(--surface); cursor: pointer; font-size: 12.5px; white-space: nowrap;
+}
+.btn:hover { background: var(--hover); }
+.btn svg { width: 14px; height: 14px; }
+.btn.primary { border-color: var(--accent); background: var(--accent); color: var(--accent-text); font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.06); }
+.btn.ghost { border-color: transparent; color: var(--muted); }
+.btn.ghost:hover { color: var(--text); }
+
+/* 提示词占用 */
+.budget { padding: 14px; border: 1px solid var(--border); border-radius: var(--r); }
+.budget-top { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; }
+.budget-total { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.budget-of { color: var(--muted); font-size: 12px; }
+.budget-warn { margin-left: auto; font-size: 12px; color: var(--amber); }
+.bar { display: flex; height: 12px; border-radius: 999px; overflow: hidden; background: var(--hover); gap: 2px; }
+.bar span { display: block; height: 100%; transition: filter 120ms; }
+.bar span:hover { filter: brightness(1.15); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: 0; }
+.legend b { color: var(--text); font-weight: 600; margin-left: 4px; font-variant-numeric: tabular-nums; }
+.legend button { border: 0; background: none; padding: 0; color: inherit; cursor: pointer; }
+.legend button:hover b { color: var(--accent); }
+
+/* 最近会话 */
+.list { border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
+.row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-top: 1px solid var(--border); }
+.row:first-child { border-top: 0; }
+.row:hover { background: var(--hover); }
+.row .dot { width: 8px; height: 8px; border-radius: 3px; flex: none; }
+.row-main { flex: 1; min-width: 0; }
+.row-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row-meta { font-size: 11.5px; color: var(--faint); }
+.row .tag { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--hover); color: var(--muted); }
+.row .tag.pending { background: color-mix(in srgb, var(--amber) 16%, transparent); color: var(--amber); }
+
+/* 设置 */
+.set-row { display: grid; grid-template-columns: 1fr 220px; align-items: center; gap: 12px; padding: 11px 12px; border-top: 1px solid var(--border); }
+.set-row:first-child { border-top: 0; }
+.set-name { display: flex; align-items: center; gap: 8px; }
+.set-note { font-size: 11.5px; color: var(--faint); margin-top: 1px; }
+.select { height: 30px; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: var(--r-sm); background: var(--surface); color: var(--text); font: inherit; font-size: 12.5px; }
+.check { display: inline-flex; align-items: center; gap: 8px; border: 0; background: none; padding: 4px 0; cursor: pointer; text-align: left; }
+.check .box { display: grid; place-items: center; width: 16px; height: 16px; border: 1.5px solid var(--border-strong); border-radius: 4px; }
+.check[aria-checked="true"] .box { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.check .box svg { width: 11px; height: 11px; opacity: 0; }
+.check[aria-checked="true"] .box svg { opacity: 1; }
+
+/* 工作台详情页 */
+.hero { display: flex; align-items: center; gap: 14px; }
+.hero .card-icon { width: 44px; height: 44px; border-radius: 12px; }
+.hero .card-icon svg { width: 22px; height: 22px; }
+.hero-actions { margin-left: auto; display: flex; gap: 6px; }
+.facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; background: var(--border); }
+.fact { padding: 10px 12px; background: var(--surface); }
+.fact-k { font-size: 11.5px; color: var(--faint); }
+.fact-v { font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.tips { display: flex; flex-direction: column; gap: 6px; }
+.tip { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: var(--r); background: var(--surface-2); font-size: 12.5px; line-height: 1.6; }
+.tip svg { width: 15px; height: 15px; flex: none; margin-top: 2px; color: var(--amber); }
+.tip .btn { margin-left: auto; height: 26px; }
+
+/* 最小化后的胶囊 */
+.dock {
+    position: fixed; z-index: 10; right: 18px; bottom: 18px; display: none; align-items: center; gap: 10px;
+    height: 42px; padding: 0 8px 0 10px; border-radius: 999px; background: var(--surface); box-shadow: var(--shadow); cursor: pointer;
+    animation: win-in 200ms var(--ease);
+}
+.dock.is-on { display: flex; }
+.dock-dots { display: flex; gap: 4px; }
+.dock-dots i { width: 7px; height: 7px; border-radius: 50%; }
+.dock-text { font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.dock-text b { font-weight: 650; }
+
+.toast { position: fixed; z-index: 20; left: 50%; bottom: 24px; transform: translateX(-50%); padding: 9px 14px; border-radius: 999px; background: var(--raised); box-shadow: var(--shadow); font-size: 12.5px; opacity: 0; pointer-events: none; transition: opacity 160ms; }
+.toast.is-on { opacity: 1; }
+
+/* 手机：变成底部抽屉 */
+@media (max-width: 640px) {
+    .win, .win.is-max { left: 0 !important; right: 0; top: auto !important; bottom: 0; width: 100% !important; height: 86vh !important; min-width: 0; transform: none; border-radius: 16px 16px 0 0; resize: none; animation: sheet-in 240ms var(--ease); }
+    @keyframes sheet-in { from { transform: translateY(30px); opacity: 0; } }
+    .titlebar { cursor: default; }
+    .titlebar::before { content: ''; position: absolute; left: 50%; top: 5px; width: 36px; height: 4px; margin-left: -18px; border-radius: 4px; background: var(--border-strong); }
+    .titlebar { position: relative; padding-top: 6px; height: 52px; }
+    .ibtn.max { display: none; }
+    .title-ctx { display: none; }
+    .wbody { flex-direction: column; }
+    .rail { width: auto; flex-direction: row; padding: 6px 8px; border-right: 0; border-bottom: 1px solid var(--border); overflow-x: auto; }
+    .rail-label, .tab .badge { display: none; }
+    .tab { width: auto; flex: none; height: 32px; }
+    .rail-foot { margin: 0; }
+    .main { padding: 14px; }
+    .cards { grid-template-columns: 1fr; }
+    .facts { grid-template-columns: repeat(2, 1fr); }
+    .hero { flex-wrap: wrap; }
+    .hero-actions { margin-left: 0; width: 100%; }
+    .set-row { grid-template-columns: 1fr; }
+    .budget-top { flex-wrap: wrap; }
+    .budget-warn { margin-left: 0; width: 100%; }
+    .host-chat { padding: 16px; }
+}
+
+
+/* ===== v2 additions ===== */
+.win { width: min(960px, calc(100vw - 32px)); height: min(640px, calc(100vh - 80px)); }
+.rail { width: 150px; }
+.tab .count { margin-left: auto; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--amber); color: #1b1300; font-size: 11px; font-weight: 650; display: grid; place-items: center; }
+.main.is-flush { padding: 0; overflow: hidden; }
+.page.is-on.split { flex-direction: row; gap: 0; height: 100%; }
+
+/* 待处理 */
+.todo { display: flex; flex-direction: column; gap: 6px; }
+.todo .tip .dot { width: 8px; height: 8px; border-radius: 3px; margin-top: 6px; flex: none; }
+.tip-main { flex: 1; min-width: 0; }
+.tip-meta { font-size: 11.5px; color: var(--faint); }
+.tip-acts { display: flex; gap: 6px; flex: none; }
+
+/* AI 页 */
+.sess { flex: none; width: 210px; display: flex; flex-direction: column; border-right: 1px solid var(--border); min-height: 0; }
+.sess-head { padding: 12px 10px 8px; }
+.sess-head .btn { width: 100%; }
+.sess-list { flex: 1; overflow: auto; padding: 0 6px 10px; }
+.sess-group { padding: 10px 8px 4px; font-size: 11px; color: var(--faint); }
+.sess-item { display: flex; gap: 8px; width: 100%; padding: 8px; border: 0; border-radius: var(--r-sm); background: none; text-align: left; cursor: pointer; }
+.sess-item:hover { background: var(--hover); }
+.sess-item[aria-current="true"] { background: var(--active); }
+.sess-item .dot { width: 8px; height: 8px; border-radius: 3px; margin-top: 5px; flex: none; }
+.sess-t { font-size: 12.5px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.sess-m { font-size: 11px; color: var(--faint); margin-top: 2px; }
+.sess-m .p { color: var(--amber); }
+
+.chat { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+.chat-head { flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.seg { display: inline-flex; padding: 2px; border-radius: var(--r); background: var(--hover); gap: 2px; }
+.seg button { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 0; border-radius: 6px; background: none; color: var(--muted); cursor: pointer; font-size: 12.5px; white-space: nowrap; }
+.seg button .dot { width: 7px; height: 7px; border-radius: 2px; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.18); }
+.target { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: var(--r-sm); background: var(--surface); font-size: 12.5px; cursor: pointer; white-space: nowrap; }
+.target svg { width: 12px; height: 12px; color: var(--faint); }
+.chat-body { flex: 1; overflow: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 14px; }
+.msg-me { align-self: flex-end; max-width: 78%; padding: 9px 13px; border-radius: 12px 12px 4px 12px; background: var(--accent-soft); line-height: 1.6; }
+.msg-ai { max-width: 92%; display: flex; flex-direction: column; gap: 8px; line-height: 1.7; }
+.reads { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; padding: 3px 9px; border-radius: 999px; background: var(--hover); color: var(--faint); font-size: 11.5px; border: 0; cursor: pointer; }
+.reads svg { width: 12px; height: 12px; }
+.chg { border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
+.chg-head { display: flex; align-items: center; gap: 8px; padding: 9px 12px; background: var(--surface-2); font-size: 12.5px; }
+.chg-head b { font-weight: 650; }
+.chg-line { display: flex; align-items: flex-start; gap: 10px; padding: 9px 12px; border-top: 1px solid var(--border); }
+.chg-line .check { padding: 0; }
+.chg-text { flex: 1; min-width: 0; font-size: 12.5px; line-height: 1.55; }
+.chg-tag { flex: none; font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--hover); color: var(--muted); }
+.chg-tag.add { background: var(--accent-soft); color: var(--accent); }
+.chg-tag.del { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+.diff { margin-top: 6px; display: grid; gap: 4px; font-size: 12px; }
+.diff div { padding: 6px 9px; border-radius: 6px; line-height: 1.6; }
+.diff .old { background: color-mix(in srgb, var(--danger) 9%, transparent); color: var(--muted); }
+.diff .new { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.diff del { text-decoration-color: var(--danger); }
+.diff ins { text-decoration: none; background: color-mix(in srgb, var(--accent) 22%, transparent); border-radius: 3px; padding: 0 2px; }
+.chg-foot { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-top: 1px solid var(--border); }
+.chg-foot .note { flex: 1; font-size: 11.5px; color: var(--faint); }
+.composer { flex: none; padding: 10px 14px 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+.chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.chip { flex: none; height: 26px; padding: 0 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--muted); font-size: 12px; cursor: pointer; white-space: nowrap; }
+.chip:hover { color: var(--text); border-color: var(--border-strong); }
+.input-row { display: flex; gap: 8px; align-items: flex-end; }
+.input { flex: 1; min-height: 38px; max-height: 120px; padding: 9px 11px; border: 1px solid var(--border-strong); border-radius: var(--r); background: var(--surface); color: var(--text); font: inherit; resize: none; }
+.input:focus { outline: none; border-color: var(--accent); }
+.send { height: 38px; }
+.composer-opts { display: flex; gap: 14px; font-size: 12px; color: var(--muted); }
+.composer-opts .check { font-size: 12px; }
+.sess-toggle { display: none; }
+
+/* 改动记录 */
+.hist { position: relative; display: flex; flex-direction: column; }
+.hist-item { position: relative; display: flex; gap: 12px; padding: 0 0 14px 22px; }
+.hist-item::before { content: ''; position: absolute; left: 6px; top: 14px; bottom: -2px; width: 1.5px; background: var(--border-strong); }
+.hist-item:last-child::before { display: none; }
+.hist-dot { position: absolute; left: 1px; top: 5px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--surface); box-shadow: 0 0 0 1.5px var(--tone); background: var(--tone); }
+.hist-card { flex: 1; min-width: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r); }
+.hist-top { display: flex; align-items: center; gap: 8px; }
+.hist-title { flex: 1; min-width: 0; font-weight: 600; font-size: 12.5px; }
+.hist-meta { font-size: 11.5px; color: var(--faint); margin-top: 2px; }
+.hist-lines { margin: 6px 0 0; padding-left: 16px; font-size: 12px; color: var(--muted); line-height: 1.7; }
+.filters { display: flex; gap: 6px; flex-wrap: wrap; }
+
+@media (max-width: 640px) {
+    .page.is-on.split { flex-direction: column; }
+    .sess { display: none; }
+    .sess.is-open { display: flex; position: absolute; inset: 0; z-index: 3; width: auto; background: var(--surface); }
+    .sess-toggle { display: grid; }
+    .chat-head { flex-wrap: wrap; padding: 8px 10px; }
+    .seg { order: 3; width: 100%; overflow-x: auto; }
+    .seg button { flex: 1; justify-content: center; }
+    .chat-body { padding: 12px; }
+    .msg-ai { max-width: 100%; }
+    .tip { flex-wrap: wrap; }
+    .tip-acts { width: 100%; padding-left: 25px; }
+    .main.is-flush { position: relative; }
+}
+.chips[hidden] { display: none; }
+@media (max-width: 640px) {
+    .rail { gap: 2px; padding: 6px; }
+    .tab { padding: 0 9px; gap: 6px; font-size: 12.5px; }
+    .tab .count { margin-left: 2px; }
+    .rail-foot .tab { font-size: 0; gap: 0; }
+    .rail-foot .tab svg { width: 17px; height: 17px; }
+    .hist-item { padding-left: 18px; }
+}
+@media (max-width: 640px) { .rail { width: auto; } }
+@media (max-width: 640px) { .tip-acts { justify-content: flex-start; } .tip-acts .btn { flex: none; margin-left: 0; } }
+
+/* ===== v3 ===== */
+.scope button[hidden] { display: none; }
+.why { margin-top: 6px; }
+.why summary { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--faint); cursor: pointer; list-style: none; }
+.why summary::-webkit-details-marker { display: none; }
+.why summary svg { width: 12px; height: 12px; }
+.why summary:hover { color: var(--muted); }
+.why[open] summary { color: var(--muted); }
+.why-body { margin-top: 6px; padding: 8px 10px; border-radius: var(--r-sm); background: var(--surface); border: 1px solid var(--border); font-size: 12px; line-height: 1.7; color: var(--muted); }
+.why-body b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.why-src { display: inline-block; margin-top: 4px; font-size: 11px; color: var(--faint); }
+.sec-title .link svg { width: 12px; height: 12px; vertical-align: -2px; margin-right: 3px; }
+
+.scope { display: inline-flex; align-items: center; padding: 2px; border-radius: var(--r); background: var(--hover); gap: 2px; }
+.scope button { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border: 0; border-radius: 6px; background: none; color: var(--muted); cursor: pointer; font-size: 12.5px; white-space: nowrap; max-width: 200px; }
+.scope button svg { width: 13px; height: 13px; flex: none; }
+.scope button span { overflow: hidden; text-overflow: ellipsis; }
+.scope button[aria-pressed="true"] { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.18); }
+.scope button:disabled { color: var(--faint); cursor: not-allowed; font-style: normal; }
+.scope-note { flex: 1 1 0; min-width: 0; font-size: 11.5px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scope-tag { display: inline-block; margin-left: 4px; padding: 0 5px; border-radius: 4px; background: var(--hover); font-size: 10.5px; color: var(--muted); }
+.empty-target { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; flex: 1; padding: 30px; text-align: center; color: var(--muted); }
+.empty-target svg { width: 30px; height: 30px; color: var(--faint); }
+.empty-target b { color: var(--text); font-size: 14px; }
+.chat.is-blocked .chat-body, .chat.is-blocked .composer { display: none; }
+.chat:not(.is-blocked) .empty-target { display: none; }
+
+.api { width: 100%; border-collapse: collapse; }
+.api th { padding: 8px 12px; font-size: 11.5px; font-weight: 500; color: var(--faint); text-align: left; background: var(--surface-2); }
+.api td { padding: 9px 12px; border-top: 1px solid var(--border); vertical-align: middle; }
+.api td:first-child { width: 120px; white-space: nowrap; }
+.api .select { width: 100%; }
+.api .select.follow { color: var(--faint); }
+.api .dot { display: inline-block; width: 8px; height: 8px; border-radius: 3px; margin-right: 7px; vertical-align: 0; }
+.api-note { margin-top: 8px; font-size: 11.5px; color: var(--faint); line-height: 1.6; }
+.rules { display: flex; flex-direction: column; }
+.rule { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-top: 1px solid var(--border); }
+.rule:first-child { border-top: 0; }
+.rule .dot { width: 8px; height: 8px; border-radius: 3px; margin-top: 6px; flex: none; }
+.rule-main { flex: 1; min-width: 0; }
+.rule-when { font-size: 11.5px; color: var(--faint); margin-top: 1px; }
+.demo-btn { margin-left: 10px; padding: 2px 8px; border: 1px solid #555; border-radius: 4px; background: none; color: #c9cbd0; font: inherit; font-size: 12px; cursor: pointer; }
+@media (max-width: 640px) {
+  .scope { order: 2; }
+  .scope-note { display: none; }
+  .api th:nth-child(1), .api td:nth-child(1) { width: 70px; }
+  .api td, .api th { padding: 8px 6px; }
+}
+
+/* ===== 问问 ===== */
+.src { flex: none; width: 210px; display: flex; flex-direction: column; border-right: 1px solid var(--border); min-height: 0; }
+.src-head { padding: 12px 12px 6px; }
+.src-head .h3 { font-size: 12.5px; font-weight: 650; }
+.src-head p { margin: 2px 0 0; font-size: 11.5px; color: var(--faint); line-height: 1.5; }
+.src-list { flex: 1; overflow: auto; padding: 4px 6px 10px; }
+.src-group { padding: 10px 8px 3px; font-size: 11px; color: var(--faint); }
+.src-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--r-sm); font-size: 12.5px; }
+.src-item:hover { background: var(--hover); }
+.src-item .st { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; }
+.src-item .st.warn { background: var(--amber); }
+.src-item .st.off { background: var(--faint); }
+.src-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.src-n { font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.src-warn { margin: 6px 8px 0; padding: 8px 10px; border-radius: var(--r-sm); background: color-mix(in srgb, var(--amber) 12%, transparent); font-size: 11.5px; line-height: 1.55; color: var(--text); }
+.src-warn button { margin-top: 5px; }
+.src-toggle { display: none; }
+.ans-table { width: 100%; border-collapse: collapse; font-size: 12px; border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
+.ans-table th { text-align: left; font-weight: 500; color: var(--faint); background: var(--surface-2); padding: 6px 10px; }
+.ans-table td { padding: 6px 10px; border-top: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+.ans-table tr.hot td { background: color-mix(in srgb, var(--amber) 9%, transparent); }
+.ans-table .err { color: var(--danger); }
+.ans-bar { display: inline-block; height: 6px; border-radius: 3px; background: var(--faint); vertical-align: middle; margin-right: 6px; opacity: .6; }
+.ans-table tr.hot .ans-bar { background: var(--amber); opacity: 1; }
+.ans-acts { display: flex; flex-wrap: wrap; gap: 6px; }
+.sent { border: 1px dashed var(--border-strong); border-radius: var(--r); font-size: 12px; }
+.sent summary { display: flex; align-items: center; gap: 6px; padding: 7px 10px; color: var(--muted); cursor: pointer; list-style: none; }
+.sent summary::-webkit-details-marker { display: none; }
+.sent summary svg { width: 13px; height: 13px; }
+.sent ul { margin: 0; padding: 0 10px 9px 28px; color: var(--muted); line-height: 1.75; }
+.ask-note { font-size: 11.5px; color: var(--faint); }
+@media (max-width: 640px) {
+  .src { display: none; }
+  .src.is-open { display: flex; position: absolute; inset: 0; z-index: 3; width: auto; background: var(--surface); }
+  .src-toggle { display: inline-flex; }
+}
+</style>
+</head>
+<body>
+<div class="host" aria-hidden="true">
+<div class="host-top"><b>Luker</b><span>雾港灯塔 · 林栖</span></div>
+<div class="host-chat">
+<div class="host-msg"><small>林栖</small>雾气从港口漫上来的时候，林栖已经把父亲的航海日志翻到了最后一页。纸页边缘被海水泡得发皱，墨迹却意外地清楚。</div>
+<div class="host-msg me"><small>你</small>上面写了什么？</div>
+<div class="host-msg"><small>林栖</small>别担心，有我在呢～她笑着把日志推到你面前，手指停在一行潦草的字上：「灯塔熄灭的那一晚，有人从北码头上了船。」</div>
+</div></div>
+<div class="host-hint">样稿：标题栏拖动，右下角拉大小，双击标题栏放大，<kbd>Alt</kbd>+<kbd>W</kbd> 收起 / 打开<button class="demo-btn" id="demo-nochar">模拟：没选角色卡</button></div>
+<div class="wb" id="wb" data-theme="dark">
+<section class="win" id="win" role="dialog" aria-label="工作台">
+<header class="titlebar" id="bar">
+<span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h7v5H4zM13 6h7v8h-7zM4 13h7v5H4zM13 16h7v2h-7z"/></svg></span><span class="title">工作台</span><span class="title-ctx" id="ctx">雾港灯塔 · 林栖</span><span class="spacer"></span>
+<button class="ibtn" id="theme" title="切换深浅色" aria-label="切换深浅色"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button>
+<button class="ibtn max" id="max" title="放大" aria-label="放大"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 9V5h4M19 9V5h-4M5 15v4h4M19 15v4h-4"/></svg></button>
+<button class="ibtn" id="min" title="收起" aria-label="收起"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 14h12"/></svg></button>
+<button class="ibtn close" id="close" title="关闭" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+</header>
+<div class="wbody"><nav class="rail" role="tablist" aria-label="工作台">
+<button class="tab" role="tab" aria-selected="true" data-go="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-6 8 6v8H4z"/><path d="M10 19v-5h4v5"/></svg>总览</button>
+<button class="tab" role="tab" aria-selected="false" data-go="ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5h14v10H10l-4 4v-4H5z"/><path d="M10 9.5a2 2 0 1 1 2.6 1.9c-.4.1-.6.5-.6.9v.2M12 14.2v.01"/></svg>问问</button>
+<button class="tab" role="tab" aria-selected="false" data-go="ai"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>AI 迭代<span class="count">3</span></button>
+<button class="tab" role="tab" aria-selected="false" data-go="hist"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4"/><path d="M12 8v4l3 2"/></svg>改动记录</button>
+<div class="rail-foot"><button class="tab" role="tab" aria-selected="false" data-go="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>设置</button></div>
+</nav><main class="main" id="main"><div class="page is-on" data-page="home">
+<div><h2 class="h2">总览</h2><p class="sub">雾港灯塔 · 林栖。哪里占地方、哪里有事要处理，都在这里。</p></div>
+<section class="budget">
+<div class="sec-title"><span>本轮提示词里各部分占多少</span><button class="link" data-toast="用当前模型的分词器重新计算">重新计算</button></div>
+<div class="budget-top"><span class="budget-total">32.7k</span><span class="budget-of">/ 上下文 64k token</span><span class="budget-warn">记忆图常驻注入比平时高 2.3 倍</span></div>
+<div class="bar" role="img" aria-label="提示词占用">
+<span style="flex:3.1;background:var(--t-preset)" title="预设 3.1k"></span>
+<span style="flex:2.4;background:var(--t-card)" title="角色卡 2.4k"></span>
+<span style="flex:1.6;background:#d4cf6f" title="世界书 1.6k"></span>
+<span style="flex:7.6;background:var(--t-memory)" title="记忆图 7.6k"></span>
+<span style="flex:18;background:var(--faint);opacity:.45" title="聊天记录 18k"></span>
+</div>
+<div class="legend">
+<span><i style="background:var(--t-preset)"></i>预设<b>3.1k</b></span>
+<span><i style="background:var(--t-card)"></i>角色卡<b>2.4k</b></span>
+<span><i style="background:#d4cf6f"></i>世界书<b>1.6k</b></span>
+<span><i style="background:var(--t-memory)"></i>记忆图<b>7.6k</b></span>
+<span><i style="background:var(--faint);opacity:.45"></i>聊天记录<b>18k</b></span>
+</div></section>
+<section><div class="sec-title"><span>待处理 · 3</span><button class="link" data-go="settings" data-scroll="rules"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5v.01"/></svg>小建议是怎么来的</button></div><div class="todo tips"><div class="tip"><span class="dot" style="background:var(--t-card)"></span><div class="tip-main"><div>角色卡有 3 处改动等你确认</div><div class="tip-meta">林栖 · 「把说话方式写得更克制」</div></div><div class="tip-acts"><button class="btn primary" data-go="ai" data-sess="s1">去确认</button></div></div><div class="tip"><span class="dot" style="background:var(--t-memory)"></span><div class="tip-main"><div>有 164 条事件还没合并成摘要，占了常驻注入的大部分</div><div class="tip-meta">记忆图 · 小建议</div><details class="why"><summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5v.01"/></svg>为什么这么说</summary><div class="why-body">事件共 <b>212</b> 条，其中 <b>164</b> 条还没合并。这些事件都是常驻注入，占了 <b>6.1k</b>（常驻一共 7.6k）。「自动合并成摘要」是开着的，但门槛设的是满 <b>200</b> 条才合并。<br><span class="why-src">规则检查 · 读的是记忆图的数据和设置，没有调用 AI</span></div></details></div><div class="tip-acts"><button class="btn" data-toast="调用记忆图原生的手动压缩">立刻合并</button><button class="btn ghost" data-toast="不再提示这一条">忽略</button></div></div><div class="tip"><span class="dot" style="background:var(--t-orch)"></span><div class="tip-main"><div>剧情顾问最近 5 次有 2 次超时</div><div class="tip-meta">编排 · 小建议</div><details class="why"><summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5v.01"/></svg>为什么这么说</summary><div class="why-body">最近 5 次运行里，「剧情顾问」有 <b>2</b> 次超过 <b>60</b> 秒被中断，其他助手都正常。两次超时用的都是同一个连接配置。<br><span class="why-src">规则检查 · 读的是编排的运行记录，没有调用 AI</span></div></details></div><div class="tip-acts"><button class="btn" data-go="ai" data-ws="orch" data-toast="已带上运行记录，让 AI 看看原因">让 AI 看看</button><button class="btn ghost" data-toast="不再提示这一条">忽略</button></div></div></div></section>
+<section><div class="sec-title"><span>四个工作台</span></div><div class="cards"><article class="card" style="--tone:var(--t-memory)">
+<div class="card-head"><span class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="7" r="2.5"/><circle cx="18" cy="8" r="2.5"/><circle cx="10" cy="18" r="2.5"/><path d="M8.4 7.3l7.1.6M7 9.3l2 6.4M16.6 10.2l-5 5.8"/></svg></span><div><div class="card-name">记忆图</div><div class="card-by">记忆结构：冒险奇幻</div></div><span class="pill warn">注入偏高</span></div>
+<div class="card-stat"><span>节点 <b>212</b></span><span>常驻 <b>7.6k</b></span></div><div class="card-actions"><button class="btn" data-go="ai" data-ws="memory"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>问 AI</button><button class="btn ghost" data-toast="打开记忆透镜，工作台收到右下角"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="12" r="6.2"/><circle cx="15" cy="12" r="6.2"/></svg>打开记忆透镜</button></div></article><article class="card" style="--tone:var(--t-orch)">
+<div class="card-head"><span class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5h5v5H5zM14 14h5v5h-5zM7.5 10v4a2 2 0 0 0 2 2H14M16.5 14v-4a2 2 0 0 0-2-2H10"/></svg></span><div><div class="card-name">编排</div><div class="card-by">5 个助手</div></div><span class="pill ok">正常</span></div>
+<div class="card-stat"><span>上次运行 <b>2 分钟前</b></span><span>平均 <b>6.2 秒</b></span></div><div class="card-actions"><button class="btn" data-go="ai" data-ws="orch"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>问 AI</button><button class="btn ghost" data-toast="打开编排透镜，工作台收到右下角"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="12" r="6.2"/><circle cx="15" cy="12" r="6.2"/></svg>打开编排透镜</button></div></article><article class="card" style="--tone:var(--t-preset)">
+<div class="card-head"><span class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 6h14M5 12h14M5 18h14"/><circle cx="9" cy="6" r="1.8"/><circle cx="15" cy="12" r="1.8"/><circle cx="8" cy="18" r="1.8"/></svg></span><div><div class="card-name">预设</div><div class="card-by">plugin-only</div></div><span class="pill ok">正常</span></div>
+<div class="card-stat"><span>启用条目 <b>23</b></span><span>占用 <b>3.1k</b></span></div><div class="card-actions"><button class="btn" data-go="ai" data-ws="preset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>问 AI</button></div></article><article class="card" style="--tone:var(--t-card)">
+<div class="card-head"><span class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18H6z"/><circle cx="12" cy="10" r="3"/><path d="M8.5 17a3.5 3.5 0 0 1 7 0"/></svg></span><div><div class="card-name">角色卡</div><div class="card-by">林栖 · 2 本世界书</div></div><span class="pill warn">待确认</span></div>
+<div class="card-stat"><span>设定 <b>2.4k</b></span><span>世界书 <b>1.6k</b></span></div><div class="card-actions"><button class="btn" data-go="ai" data-ws="card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>问 AI</button></div></article></div></section>
+</div><div class="page split" data-page="ask"><aside class="src" id="src">
+<div class="src-head"><div class="h3">问问能看到的</div><p>全部在本地读取。回答时只把用得上的部分发给 AI。</p></div>
+<div class="src-list">
+<div class="src-group">运行记录</div>
+<div class="src-item"><span class="st "></span><span class="src-name">请求检查器</span><span class="src-n">186 次请求</span></div>
+<div class="src-item"><span class="st warn"></span><span class="src-name">前端日志</span><span class="src-n">1,284 条</span></div>
+<div class="src-item"><span class="st "></span><span class="src-name">服务器日志</span><span class="src-n">500 条</span></div>
+<div class="src-item"><span class="st "></span><span class="src-name">调试信息</span><span class="src-n">浏览器 / 版本</span></div>
+<div class="src-warn">「前端调试日志」没打开，API 请求的日志不会记下来。<br><button class="btn" data-toast="会打开 Luker 用户设置里的这个开关">帮我打开</button></div>
+<div class="src-group">当前内容</div>
+<div class="src-item"><span class="st "></span><span class="src-name">聊天</span><span class="src-n">雾港灯塔 · 412 楼</span></div>
+<div class="src-item"><span class="st "></span><span class="src-name">角色卡</span><span class="src-n">林栖</span></div>
+<div class="src-item"><span class="st "></span><span class="src-name">世界书</span><span class="src-n">2 本 · 86 条</span></div>
+<div class="src-item"><span class="st "></span><span class="src-name">预设</span><span class="src-n">plugin-only</span></div>
+<div class="src-item"><span class="st "></span><span class="src-name">连接配置</span><span class="src-n">DeepSeek 官方</span></div>
+<div class="src-group">插件</div>
+<div class="src-item"><span class="st "></span><span class="src-name">记忆图</span><span class="src-n">212 个节点</span></div>
+<div class="src-item"><span class="st "></span><span class="src-name">编排</span><span class="src-n">5 个助手 · 30 次运行</span></div>
+<div class="src-item"><span class="st "></span><span class="src-name">token 记录</span><span class="src-n">26 次</span></div>
+<div class="src-item"><span class="st "></span><span class="src-name">小建议</span><span class="src-n">3 条</span></div>
+</div></aside><section class="chat">
+<div class="chat-head">
+<button class="ibtn src-toggle" data-src-toggle aria-label="能看到的内容"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg></button>
+<span style="font-weight:650">问问</span><span class="ask-note">什么都能问，只读，不会改任何东西</span>
+<span class="spacer"></span><button class="btn ghost" data-toast="新对话"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>新对话</button>
+</div>
+<div class="chat-body">
+<div class="msg-me">刚才那条回复为什么等了快 50 秒？</div>
+<div class="msg-ai">
+<button class="reads" data-toast="展开看问问读了哪些内容"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>看了 请求检查器 5 次请求 · 前端日志 41 条 · 编排运行记录</button>
+<div>第 412 楼一共发了 5 个请求，总共 <b>50.3 秒</b>。慢在<b>编排的「剧情顾问」</b>：第一次请求被 DeepSeek 返回 <b>429（请求太频繁）</b>，等了 20 秒自动重试才成功。其他请求都正常。</div>
+<table class="ans-table"><thead><tr><th>请求</th><th>用时</th><th>token</th><th>状态</th></tr></thead><tbody><tr class=""><td>主模型回复</td><td><span class="ans-bar" style="width:16px"></span>8.4s</td><td>9.1k</td><td class="">完成</td></tr><tr class=""><td>记忆图 · 召回规划</td><td><span class="ans-bar" style="width:6px"></span>3.1s</td><td>4.2k</td><td class="">完成</td></tr><tr class="hot"><td>编排 · 剧情顾问</td><td><span class="ans-bar" style="width:60px"></span>31.2s</td><td>6.8k</td><td class="err">429 → 重试后完成</td></tr><tr class=""><td>编排 · 文风检查</td><td><span class="ans-bar" style="width:5px"></span>2.6s</td><td>2.1k</td><td class="">完成</td></tr><tr class=""><td>记忆图 · 提取</td><td><span class="ans-bar" style="width:10px"></span>5.0s</td><td>3.3k</td><td class="">完成</td></tr></tbody></table>
+<div>这 5 个请求是一个接一个发的，同一个连接 1 分钟内发了 5 次，所以容易撞上频率限制。可以给剧情顾问换一个连接，或者在编排里把它和召回规划错开。</div>
+<div class="ans-acts"><button class="btn" data-go="ai" data-ws="orch" data-toast="已带上这次的分析，去 AI 迭代改编排"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>去改编排</button><button class="btn ghost" data-toast="打开请求检查器里这一条"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h6"/></svg>看原始请求</button></div>
+<details class="sent"><summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>发给 AI 的内容（约 2.3k token）</summary><ul><li>5 次请求的来源、用时、token、状态码（不含消息全文）</li><li>前端日志里和这一楼有关的 6 条（已去掉 API key）</li><li>编排方案的助手顺序</li></ul></details>
+</div>
+</div>
+<div class="composer">
+<div class="chips"><button class="chip" data-fill="这条回复为什么会这样写">这条回复为什么会这样写</button><button class="chip" data-fill="刚才为什么报错">刚才为什么报错</button><button class="chip" data-fill="哪个插件最费 token">哪个插件最费 token</button><button class="chip" data-fill="这次发给模型的提示词里有什么">这次的提示词里有什么</button><button class="chip" data-fill="帮我写一份问题反馈，附上调试信息">帮我写问题反馈</button></div>
+<div class="input-row"><textarea class="input" rows="1" placeholder="问什么都行，比如：为什么她突然忘了昨天的事？"></textarea><button class="btn primary send" data-toast="发送"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg>发送</button></div>
+<div class="composer-opts"><button class="check" role="checkbox" aria-checked="false" data-check><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><span>发给 AI 前先给我看</span></button></div>
+</div></section></div><div class="page split" data-page="ai"><aside class="sess" id="sess">
+<div class="sess-head"><button class="btn" data-newchat><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>新对话</button></div>
+<div class="sess-list">
+<div class="sess-group">今天</div>
+<button class="sess-item" data-sid="s1" aria-current="true"><span class="dot" style="background:var(--t-card)"></span><span><span class="sess-t">把林栖的说话方式写得更克制</span><span class="sess-m">角色卡 · 林栖 · 12 分钟前 · <span class="p">3 处待确认</span></span></span></button>
+<button class="sess-item" data-sid="s2" aria-current="false"><span class="dot" style="background:var(--t-memory)"></span><span><span class="sess-t">新增「物品」类型，记录信物去向</span><span class="sess-m">记忆图 · 全局 · 1 小时前</span></span></button>
+<div class="sess-group">更早</div>
+<button class="sess-item" data-sid="s3" aria-current="false"><span class="dot" style="background:var(--t-orch)"></span><span><span class="sess-t">剧情顾问为什么总是超时</span><span class="sess-m">编排 · 全局 · 昨天</span></span></button>
+<button class="sess-item" data-sid="s4" aria-current="false"><span class="dot" style="background:var(--t-preset)"></span><span><span class="sess-t">精简文风条目，去掉重复要求</span><span class="sess-m">预设 · 全局 · 前天</span></span></button>
+<button class="sess-item" data-sid="s5" aria-current="false"><span class="dot" style="background:var(--t-card)"></span><span><span class="sess-t">给世界书补充雾港的地理</span><span class="sess-m">角色卡 · 林栖 · 3 天前</span></span></button>
+</div></aside><section class="chat">
+<div class="chat-head">
+<button class="ibtn sess-toggle" data-sess-toggle aria-label="对话列表"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg></button>
+<div class="seg" role="group" aria-label="改哪里"><button aria-pressed="false" data-ws="memory"><span class="dot" style="background:var(--t-memory)"></span>记忆图</button><button aria-pressed="false" data-ws="orch"><span class="dot" style="background:var(--t-orch)"></span>编排</button><button aria-pressed="false" data-ws="preset"><span class="dot" style="background:var(--t-preset)"></span>预设</button><button aria-pressed="true" data-ws="card"><span class="dot" style="background:var(--t-card)"></span>角色卡</button></div>
+<div class="scope" role="group" aria-label="改哪一份">
+<button aria-pressed="false" data-scope="global"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.8 3 2.8 15 0 18M12 3c-2.8 3-2.8 15 0 18"/></svg><span>全局</span></button>
+<button aria-pressed="true" data-scope="char" id="scope-char"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18H6z"/><circle cx="12" cy="10" r="3"/><path d="M8.5 17a3.5 3.5 0 0 1 7 0"/></svg><span id="scope-char-name">当前角色卡「林栖」</span></button>
+</div><span class="scope-note" id="scope-note">只改林栖自己的那份，其他角色不受影响</span>
+</div>
+<div class="empty-target"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18H6z"/><circle cx="12" cy="10" r="3"/><path d="M8.5 17a3.5 3.5 0 0 1 7 0"/></svg><b>未选择角色卡</b><div id="empty-text">角色卡没有全局的一份。先在 Luker 里打开一个角色的聊天，再回来改。记忆图、编排、预设可以照常改全局的。</div></div><div class="chat-body">
+<div class="msg-me">她刚才那句「别担心，有我在呢～」太不像她了，她应该更冷一点。</div>
+<div class="msg-ai">
+<button class="reads" data-toast="展开看 AI 读了哪些内容"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>AI 看了角色卡 2 处 · 引用的那条回复</button>
+<div>问题主要在「说话方式」：现在写的是「温柔、主动关心、爱开玩笑」，模型就照着写了。我把它改成「关心藏在动作里」，再补一段她回避追问的示例对话，让模型有个参照。</div>
+<div class="chg">
+<div class="chg-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg><b>3 处改动</b><span style="color:var(--faint)">· 角色卡「林栖」</span></div>
+<div class="chg-line"><button class="check" role="checkbox" aria-checked="true" data-check ><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><span></span></button><div class="chg-text">改写「说话方式」
+<div class="diff"><div class="old"><del>说话温柔，常常主动关心别人，喜欢开玩笑缓和气氛。</del></div><div class="new">话不多，<ins>关心藏在动作里而不是嘴上</ins>；被问到父亲时会<ins>先沉默一下再回答</ins>。</div></div></div><span class="chg-tag">修改</span></div>
+<div class="chg-line"><button class="check" role="checkbox" aria-checked="true" data-check ><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><span></span></button><div class="chg-text">在「示例对话」里加一段她回避追问的例子</div><span class="chg-tag add">新增</span></div>
+<div class="chg-line"><button class="check" role="checkbox" aria-checked="false" data-check ><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><span></span></button><div class="chg-text">删掉「性格」里重复的「温柔」</div><span class="chg-tag del">删除</span></div>
+<div class="chg-foot"><span class="note">应用后写进角色卡，在「改动记录」里可以撤销</span><button class="btn ghost" data-toast="已全部放弃">全部放弃</button><button class="btn primary" data-toast="已应用 2 处，写入角色卡">应用所选（2）</button></div>
+</div>
+<div style="font-size:12px;color:var(--faint)">顺便提一句：预设里「文风」条目要求「语气亲切」，也会把她往热情的方向拉。要不要一起看看？ <button class="link" data-ws-jump="preset">去预设</button></div>
+</div>
+</div>
+<div class="composer">
+<div class="chips" data-chips="card" ><button class="chip" data-fill="这条回复不像她，帮我找原因">这条回复不像她，帮我找原因</button><button class="chip" data-fill="精简设定，去掉重复的描述">精简设定，去掉重复的描述</button><button class="chip" data-fill="补几段示例对话">补几段示例对话</button><button class="chip" data-fill="检查世界书有没有冲突">检查世界书有没有冲突</button></div><div class="chips" data-chips="memory" hidden><button class="chip" data-fill="为什么这次没召回 XX">为什么这次没召回 XX</button><button class="chip" data-fill="帮我新建一个记忆类型">帮我新建一个记忆类型</button><button class="chip" data-fill="常驻注入太高怎么办">常驻注入太高怎么办</button><button class="chip" data-fill="整理一下事件的提示">整理一下事件的提示</button></div><div class="chips" data-chips="orch" hidden><button class="chip" data-fill="最近一次运行哪里慢">最近一次运行哪里慢</button><button class="chip" data-fill="这个助手的提示词能更短吗">这个助手的提示词能更短吗</button><button class="chip" data-fill="新增一个检查 OOC 的助手">新增一个检查 OOC 的助手</button></div><div class="chips" data-chips="preset" hidden><button class="chip" data-fill="找出互相矛盾的要求">找出互相矛盾的要求</button><button class="chip" data-fill="精简文风条目">精简文风条目</button><button class="chip" data-fill="这条回复太长了，改哪里">这条回复太长了，改哪里</button></div>
+<div class="input-row"><textarea class="input" rows="1" placeholder="想改什么？用平常说话的方式描述就行"></textarea><button class="btn primary send" data-toast="发送"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg>发送</button></div>
+<div class="composer-opts"><button class="check" role="checkbox" aria-checked="true" data-check ><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><span>带上最近一条回复</span></button><button class="check" role="checkbox" aria-checked="false" data-check ><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><span>自动应用</span></button></div>
+</div>
+</section></div><div class="page" data-page="hist">
+<div><h2 class="h2">改动记录</h2><p class="sub">AI 和你在这里应用过的所有改动。每一条都能单独撤销。</p></div>
+<div class="filters"><button class="chip" style="border-color:var(--accent);color:var(--text)">全部</button><button class="chip">记忆图</button><button class="chip">编排</button><button class="chip">预设</button><button class="chip">角色卡</button></div>
+<div class="hist">
+<div class="hist-item" style="--tone:var(--t-card)"><span class="hist-dot"></span><div class="hist-card"><div class="hist-top"><div class="hist-title">林栖：说话方式改得更克制</div><button class="btn ghost" data-toast="已撤销这次改动"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3"/></svg>撤销</button></div><div class="hist-meta">角色卡 · 今天 15:42 · 来自 AI 对话</div><ul class="hist-lines"><li>改写「说话方式」</li><li>新增 1 段示例对话</li></ul></div></div>
+<div class="hist-item" style="--tone:var(--t-memory)"><span class="hist-dot"></span><div class="hist-card"><div class="hist-top"><div class="hist-title">新增「物品」类型</div><button class="btn ghost" data-toast="已撤销这次改动"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3"/></svg>撤销</button></div><div class="hist-meta">记忆图 · 今天 14:10 · 来自 AI 对话</div><ul class="hist-lines"><li>新建类型「物品」，4 个记录项</li><li>「任务」打开「一直让 AI 看到」</li></ul></div></div>
+<div class="hist-item" style="--tone:var(--t-memory)"><span class="hist-dot"></span><div class="hist-card"><div class="hist-top"><div class="hist-title">常驻注入最大回溯楼层 0 → 100</div><button class="btn ghost" data-toast="已撤销这次改动"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3"/></svg>撤销</button></div><div class="hist-meta">记忆图 · 今天 13:55 · 来自小建议</div><ul class="hist-lines"><li>常驻注入从 7.6k 降到 3.2k</li></ul></div></div>
+<div class="hist-item" style="--tone:var(--t-preset)"><span class="hist-dot"></span><div class="hist-card"><div class="hist-top"><div class="hist-title">精简文风条目</div><span class="tip-meta">已撤销</span></div><div class="hist-meta">预设 plugin-only · 前天</div><ul class="hist-lines"><li>删掉 2 条重复要求</li><li>合并「语气」和「文风」</li></ul></div></div>
+</div></div><div class="page" data-page="settings">
+<div><h2 class="h2">设置</h2><p class="sub">AI 接口统一选一次，四个工作台共用。</p></div>
+<section><div class="sec-title"><span>AI 接口</span><button class="link" data-toast="DeepSeek 官方 + plugin-only：连接正常，用时 1.2 秒">测试默认</button></div>
+<div class="list"><table class="api"><thead><tr><th></th><th>连接配置</th><th>生成预设</th></tr></thead><tbody>
+<tr><td><b>默认</b></td><td><select class="select"><option>DeepSeek 官方</option><option>Claude（中转）</option><option>本地 Ollama</option></select></td><td><select class="select"><option>plugin-only</option><option>默认</option><option>写作-长回复</option></select></td></tr>
+<tr><td><span class="dot" style="background:var(--t-memory)"></span>记忆图</td><td><select class="select follow"><option>跟随默认</option><option>DeepSeek 官方</option><option>Claude（中转）</option><option>本地 Ollama</option></select></td><td><select class="select follow"><option>跟随默认</option><option>plugin-only</option><option>默认</option><option>写作-长回复</option></select></td></tr><tr><td><span class="dot" style="background:var(--t-orch)"></span>编排</td><td><select class="select follow"><option>跟随默认</option><option>DeepSeek 官方</option><option>Claude（中转）</option><option>本地 Ollama</option></select></td><td><select class="select follow"><option>跟随默认</option><option>plugin-only</option><option>默认</option><option>写作-长回复</option></select></td></tr><tr><td><span class="dot" style="background:var(--t-preset)"></span>预设</td><td><select class="select follow"><option>跟随默认</option><option>DeepSeek 官方</option><option>Claude（中转）</option><option>本地 Ollama</option></select></td><td><select class="select follow"><option>跟随默认</option><option>plugin-only</option><option>默认</option><option>写作-长回复</option></select></td></tr><tr><td><span class="dot" style="background:var(--t-card)"></span>角色卡</td><td><select class="select follow"><option>跟随默认</option><option>DeepSeek 官方</option><option>Claude（中转）</option><option>本地 Ollama</option></select></td><td><select class="select follow"><option>跟随默认</option><option>plugin-only</option><option>默认</option><option>写作-长回复</option></select></td></tr></tbody></table></div>
+<p class="api-note">连接配置决定用哪个模型、哪个地址；生成预设决定发请求时包在外面的提示词（破限内容在这里，会照常带上）。两项都来自 Luker 自己的列表，工作台只是选用，不会改动它们。</p>
+<div style="margin-top:8px;display:flex;flex-direction:column;gap:4px"><button class="check" role="checkbox" aria-checked="true" data-check><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><span>使用内置的迭代提示词（告诉 AI 这是在改设定，不是写故事）</span></button><button class="check" role="checkbox" aria-checked="true" data-check><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><span>改动先给我看，不要直接应用</span></button></div></section>
+<section><div class="sec-title"><span>问问</span></div>
+<div class="list"><div class="set-row"><div><div class="set-name">请求检查器</div><div class="set-note">最近 200 次请求的完整内容、用时、状态</div></div><button class="check" role="checkbox" aria-checked="true" data-check><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><span>读取</span></button></div><div class="set-row"><div><div class="set-name">前端日志</div><div class="set-note">浏览器控制台输出，刷新页面后清空</div></div><button class="check" role="checkbox" aria-checked="true" data-check><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><span>读取</span></button></div><div class="set-row"><div><div class="set-name">服务器日志</div><div class="set-note">开了多用户时只有管理员能读</div></div><button class="check" role="checkbox" aria-checked="true" data-check><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><span>读取</span></button></div><div class="set-row"><div><div class="set-name">当前内容</div><div class="set-note">聊天、角色卡、世界书、预设、连接配置</div></div><button class="check" role="checkbox" aria-checked="true" data-check><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><span>读取</span></button></div><div class="set-row"><div><div class="set-name">插件</div><div class="set-note">记忆图、编排、token 记录、小建议</div></div><button class="check" role="checkbox" aria-checked="true" data-check><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><span>读取</span></button></div>
+<div class="set-row"><div><div class="set-name">聊天原文最多带几楼</div><div class="set-note">问到某条回复时，连同前后几楼一起发给 AI</div></div><select class="select"><option>前后各 2 楼</option><option>只带那一楼</option><option>前后各 5 楼</option></select></div>
+</div>
+<div style="margin-top:8px;display:flex;flex-direction:column;gap:4px"><button class="check" role="checkbox" aria-checked="false" data-check><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><span>发给 AI 前先给我看</span></button><button class="check" role="checkbox" aria-checked="true" data-check><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><span>发出去之前去掉 API key 和地址</span></button></div></section>
+<section><div class="sec-title"><span>窗口</span></div><div class="list">
+<div class="set-row"><div><div class="set-name">快捷键</div><div class="set-note">也可以从魔杖菜单打开</div></div><select class="select"><option>Alt + W</option><option>不用快捷键</option></select></div>
+
+</div></section><section id="rules"><div class="sec-title"><span>小建议</span></div>
+<p class="sub" style="margin:0 0 8px">都是固定的规则，在本地检查记忆图、编排、预设和角色卡的数据和设置，<b>不调用 AI，不花 token</b>。每次打开工作台、或者每次生成回复后检查一遍。点「让 AI 看看」时才会真正调用 AI。</p>
+<div class="list rules"><div class="rule"><span class="dot" style="background:var(--t-memory)"></span><div class="rule-main"><div>常驻注入偏高</div><div class="rule-when">常驻注入比这个聊天平时高 1.5 倍以上，或超过上下文的 20%</div></div><button class="check" role="checkbox" aria-checked="true" data-check><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><span></span></button></div><div class="rule"><span class="dot" style="background:var(--t-memory)"></span><div class="rule-main"><div>事件堆着没合并</div><div class="rule-when">没合并的事件超过 50 条</div></div><button class="check" role="checkbox" aria-checked="true" data-check><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><span></span></button></div><div class="rule"><span class="dot" style="background:var(--t-memory)"></span><div class="rule-main"><div>常驻回溯不限</div><div class="rule-when">「常驻注入最大回溯楼层」是 0，且聊天超过 200 楼</div></div><button class="check" role="checkbox" aria-checked="true" data-check><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><span></span></button></div><div class="rule"><span class="dot" style="background:var(--t-orch)"></span><div class="rule-main"><div>助手经常超时</div><div class="rule-when">最近 5 次运行里同一个助手超时 2 次以上</div></div><button class="check" role="checkbox" aria-checked="true" data-check><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><span></span></button></div><div class="rule"><span class="dot" style="background:var(--t-orch)"></span><div class="rule-main"><div>助手很慢</div><div class="rule-when">某个助手平均用时占整次运行的一半以上</div></div><button class="check" role="checkbox" aria-checked="true" data-check><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><span></span></button></div><div class="rule"><span class="dot" style="background:var(--t-preset)"></span><div class="rule-main"><div>预设条目重复</div><div class="rule-when">两条启用的条目内容有八成以上相同</div></div><button class="check" role="checkbox" aria-checked="false" data-check><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><span></span></button></div><div class="rule"><span class="dot" style="background:var(--t-card)"></span><div class="rule-main"><div>角色卡有改动没确认</div><div class="rule-when">AI 对话里有没应用也没放弃的改动</div></div><button class="check" role="checkbox" aria-checked="true" data-check><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><span></span></button></div></div></section></div></main></div>
+</section>
+<button class="dock" id="dock" aria-label="打开工作台"><span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h7v5H4zM13 6h7v8h-7zM4 13h7v5H4zM13 16h7v2h-7z"/></svg></span><span class="dock-text">提示词 <b>32.7k</b> · <b style="color:var(--amber)">3</b> 件待处理</span></button>
+<div class="toast" id="toast" role="status"></div>
+</div>
+<script>
+const $ = (s, r = document) => r.querySelector(s);
+const wb = $('#wb'), win = $('#win'), dock = $('#dock'), toast = $('#toast'), main = $('#main');
+let toastTimer;
+const NAMES = { memory: ['记忆图', '冒险奇幻'], orch: ['编排', '默认方案'], preset: ['预设', 'plugin-only'], card: ['角色卡', '林栖'] };
+function say(text) { toast.textContent = text; toast.classList.add('is-on'); clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove('is-on'), 2200); }
+function go(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.toggle('is-on', p.dataset.page === page));
+  document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', String(t.dataset.go === page)));
+  main.classList.toggle('is-flush', page === 'ai' || page === 'ask');
+}
+let ws = 'card', scope = 'char', noChar = false;
+const SCOPE_NOTE = {
+  memory: { global: '改所有角色共用的记忆结构', char: '只改林栖单独的记忆结构（没有的话会新建一份）' },
+  orch: { global: '改所有角色共用的编排方案', char: '只改林栖单独的编排方案' },
+  preset: { global: '预设不分角色，改的是当前预设 plugin-only' },
+  card: { char: '只改林栖的角色卡和绑定的世界书' },
+};
+function renderScope() {
+  const g = document.querySelector('[data-scope="global"]'), c = $('#scope-char');
+  const canGlobal = ws !== 'card', canChar = ws !== 'preset' && !noChar;
+  if (!canGlobal && scope === 'global') scope = 'char';
+  if (!canChar && ws === 'preset') scope = 'global';
+  if (noChar && ws !== 'card' && scope === 'char') scope = 'global';
+  g.disabled = !canGlobal; g.hidden = ws === 'card';
+  c.hidden = ws === 'preset';
+  c.disabled = noChar;
+  $('#scope-char-name').textContent = noChar ? '未选择角色卡' : '当前角色卡「林栖」';
+  g.setAttribute('aria-pressed', String(scope === 'global'));
+  c.setAttribute('aria-pressed', String(scope === 'char'));
+  const blocked = ws === 'card' && noChar;
+  $('.chat').classList.toggle('is-blocked', blocked);
+  $('#scope-note').title = $('#scope-note').textContent = blocked ? '' : (noChar && ws !== 'preset' ? '没选角色卡，只能改全局的' : SCOPE_NOTE[ws][scope] || '');
+}
+function setWs(next) {
+  ws = next;
+  document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.ws === ws)));
+  document.querySelectorAll('[data-chips]').forEach(c => c.hidden = c.dataset.chips !== ws);
+  if (ws === 'card') scope = 'char';
+  renderScope();
+}
+function setNoChar(v) {
+  noChar = v;
+  $('#ctx').textContent = v ? '未选择角色卡' : '雾港灯塔 · 林栖';
+  $('#demo-nochar').textContent = v ? '模拟：选了林栖' : '模拟：没选角色卡';
+  renderScope();
+}
+document.addEventListener('click', (e) => {
+  const g = e.target.closest('[data-go]'); if (g) { go(g.dataset.go); if (g.dataset.scroll) setTimeout(() => document.getElementById(g.dataset.scroll)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }
+  const sc = e.target.closest('[data-scope]'); if (sc && !sc.disabled) { scope = sc.dataset.scope; renderScope(); }
+  if (e.target.closest('#demo-nochar')) setNoChar(!noChar);
+  const w = e.target.closest('[data-ws]'); if (w) setWs(w.dataset.ws);
+  const j = e.target.closest('[data-ws-jump]'); if (j) { setWs(j.dataset.wsJump); say('已切到预设，上下文一起带过去'); }
+  const t = e.target.closest('[data-toast]'); if (t) say(t.dataset.toast);
+  const c = e.target.closest('[data-check]'); if (c) c.setAttribute('aria-checked', String(c.getAttribute('aria-checked') !== 'true'));
+  const f = e.target.closest('[data-fill]'); if (f) { const i = $('.input'); i.value = f.dataset.fill; i.focus(); }
+  const s = e.target.closest('.sess-item'); if (s) { document.querySelectorAll('.sess-item').forEach(x => x.setAttribute('aria-current', String(x === s))); $('#sess').classList.remove('is-open'); }
+  if (e.target.closest('[data-src-toggle]')) $('#src').classList.toggle('is-open');
+  if (e.target.closest('[data-sess-toggle]')) $('#sess').classList.toggle('is-open');
+  if (e.target.closest('[data-newchat]')) { say('新对话'); $('#sess').classList.remove('is-open'); }
+});
+$('#theme').onclick = () => { wb.dataset.theme = wb.dataset.theme === 'dark' ? 'light' : 'dark'; };
+$('#max').onclick = () => win.classList.toggle('is-max');
+const hide = () => { win.classList.add('is-min'); dock.classList.add('is-on'); };
+const show = () => { win.classList.remove('is-min'); dock.classList.remove('is-on'); };
+$('#min').onclick = hide;
+$('#close').onclick = () => { hide(); say('已关闭（样稿：点右下角胶囊再打开）'); };
+dock.onclick = show;
+addEventListener('keydown', (e) => { if (e.altKey && e.code === 'KeyW') { e.preventDefault(); win.classList.contains('is-min') ? show() : hide(); } });
+$('#bar').addEventListener('pointerdown', (e) => {
+  if (e.target.closest('button') || win.classList.contains('is-max') || matchMedia('(max-width: 640px)').matches) return;
+  const r = win.getBoundingClientRect(); const dx = e.clientX - r.left, dy = e.clientY - r.top;
+  win.style.transform = 'none'; win.style.left = r.left + 'px'; win.style.top = r.top + 'px';
+  const move = (ev) => { win.style.left = Math.min(innerWidth - 80, Math.max(-r.width + 120, ev.clientX - dx)) + 'px'; win.style.top = Math.min(innerHeight - 46, Math.max(0, ev.clientY - dy)) + 'px'; };
+  const up = () => { removeEventListener('pointermove', move); removeEventListener('pointerup', up); };
+  addEventListener('pointermove', move); addEventListener('pointerup', up);
+});
+$('#bar').addEventListener('dblclick', (e) => { if (!e.target.closest('button')) win.classList.toggle('is-max'); });
+const q = new URLSearchParams(location.search);
+if (q.get('theme')) wb.dataset.theme = q.get('theme');
+if (q.get('page')) go(q.get('page'));
+if (q.get('min')) hide();
+if (q.get('ws')) setWs(q.get('ws'));
+if (q.get('nochar')) setNoChar(true);
+renderScope();
+</script>
+</body>
+</html>

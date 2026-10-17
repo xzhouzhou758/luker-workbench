@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>工作台 · 预览</title>
+<link rel="stylesheet" href="../style.css">
+<style>
+    /* A rough stand-in for Luker's chat page behind the window. */
+    html, body { margin: 0; height: 100%; background: #2a2c31; color: #c9cbd0; font: 14px system-ui, "PingFang SC", sans-serif; overflow: hidden; }
+    .host-top { height: 44px; display: flex; align-items: center; gap: 14px; padding: 0 16px; background: #1e2024; border-bottom: 1px solid #000; }
+    .host-chat { padding: 24px max(24px, 12vw); display: flex; flex-direction: column; gap: 14px; }
+    .host-msg { max-width: 720px; padding: 12px 16px; border-radius: 10px; background: rgba(255,255,255,.05); line-height: 1.7; }
+    .host-msg.me { align-self: flex-end; background: rgba(90,140,255,.14); }
+    .host-open { position: fixed; left: 16px; bottom: 14px; padding: 6px 12px; border: 1px solid #555; border-radius: 6px; background: none; color: #c9cbd0; cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="host-top"><b style="color:#fff">Luker</b><span>雾港灯塔 · 林栖</span></div>
+<div class="host-chat">
+    <div class="host-msg">雾气从港口漫上来的时候，林栖已经把父亲的航海日志翻到了最后一页。</div>
+    <div class="host-msg me">上面写了什么？</div>
+    <div class="host-msg">别担心，有我在呢～她笑着把日志推到你面前：「灯塔熄灭的那一晚，有人从北码头上了船。」</div>
+</div>
+<button class="host-open" id="open">打开工作台（Alt+W）</button>
+<script type="module">
+    import { mountWorkbench } from '../src/app.js';
+    import * as source from './mock-source.js';
+    const params = new URLSearchParams(location.search);
+    const prefs = JSON.parse(localStorage.getItem('workbench.prefs.v1') || '{}');
+    for (const key of ['theme', 'page']) if (params.get(key)) prefs[key] = params.get(key);
+    if (params.get('fresh')) delete prefs.box;
+    localStorage.setItem('workbench.prefs.v1', JSON.stringify(prefs));
+    let handle = null;
+    const open = () => { if (handle) handle.expand(); else handle = mountWorkbench({ source, onClose: () => { handle = null; } }); };
+    document.getElementById('open').onclick = open;
+    addEventListener('keydown', (e) => { if (e.altKey && e.code === 'KeyW') { e.preventDefault(); handle ? handle.toggle() : open(); } });
+    open();
+    window.__wb = () => handle;
+</script>
+</body>
+</html>
