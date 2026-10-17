@@ -1,6 +1,6 @@
 # CLAUDE.md — 工作台（luker-workbench）
 
-Luker 第三方扩展：一个可拖动的浮动窗口，汇总四个 AI 工作台（记忆图、编排、预设、角色卡）。姊妹项目 memory-lens、orchestra-lens（`../`），风格和约定沿用它们。当前版本 0.1.0（开发中）。
+Luker 第三方扩展：一个可拖动的浮动窗口，汇总四个 AI 工作台（记忆图、编排、预设、角色卡）。姊妹项目 memory-lens、orchestra-lens（`../`），风格和约定沿用它们。当前版本 0.1.0（首版，待真机验收）。
 
 ## 用户的硬性要求
 
@@ -44,8 +44,18 @@ docs/                  接口调查与取舍.md、给原作者的接口问题.md
 
 ## 进度
 
-- [x] 0.1 窗口、总览（占用条 / 待处理 / 四张卡片）、设置、小建议
-- [ ] 问问
-- [ ] AI 迭代：记忆图、编排
-- [ ] AI 迭代：预设、角色卡
-- [ ] 改动记录 + 撤销
+- [x] 窗口、总览（占用条 / 待处理 / 四张卡片）、设置、小建议
+- [x] 问问（src/model/ask.js 工具 + 循环；读取器 source-luker.js askReaders；请求来源推测 model/requests.js）
+- [x] AI 迭代：四个适配器（source-iterate.js），改动清单按「单元」比较（model/units.js、model/adapters.js）
+- [x] 改动记录 + 撤销（model/history.js；撤销函数只在本次页面加载内有效）
+- [ ] 真机验收（用户）
+
+## AI 迭代要点
+
+- 每个适配器：load(scope) → live；tools/isRead/runRead/runEdit；units(live) 切成单元；rebuild(base, ai, keys)；commit(target, base, next, keys) → { undo }。
+- 记忆图：工具和提示词全用 memory-graph schema-iteration 的（去掉控制工具，加 mg_schema_read_fields）；保存同原生（角色 = persistCharacterSchemaOverride）。
+- 编排：原生迭代工具没导出 → 自己的 wb_orch_* 四个工具（逻辑来自 orchestra-lens edit.js），保存时只把改了的字段叠到最新存档上。
+- 预设：CPA 的工具 / 提示词 / normalizeToolCallToEdit + iterationLibrary.applyEdits；去掉 skill 工具和 preset_clone_to_new；保存 ctx.presets.save(ref, body, {select:true})。
+- 角色卡：CEA 的工具 / 提示词 / normalize；live = { character, lorebooks }（主世界书 + 绑定的书）；保存 commitCharacterEditorOperations + commitLorebookOperations。
+- 一轮结束后 AI 副本和存档比较 → 改动清单；没勾的会从草稿撤回，并在下一轮开头告诉 AI（decisionNote）。
+- 「自动应用」= settings.reviewChanges 取反。

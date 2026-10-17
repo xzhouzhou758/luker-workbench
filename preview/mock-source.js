@@ -114,5 +114,42 @@ export async function aiRequest(role, { messages, tools }) {
             }],
         };
     }
-    return { text: '（预览里的假回复）', calls: [] };
+    if (role === 'card') {
+        if (toolTurns === 0) return { text: '', calls: [
+            { id: 'e1', name: 'set', args: { field: 'personality', value: '话不多，关心藏在动作里而不是嘴上；被问到父亲时会先沉默一下再回答。' } },
+            { id: 'e2', name: 'set', args: { field: 'mes_example', value: '<START>\n{{user}}：你父亲呢？\n{{char}}：（把灯罩擦了很久）……先把灯点上吧。' } },
+            { id: 'e3', name: 'set', args: { entry: { uid: 2, key: ['灯塔'], comment: '第七灯塔', content: '林栖每晚在这里守夜。' } } },
+        ] };
+        return { text: '问题主要在「性格」：现在写的是「温柔、主动关心、爱开玩笑」，模型就照着写了。我改成「关心藏在动作里」，再补一段她回避追问的示例对话，顺便在世界书里补了灯塔。', calls: [] };
+    }
+    return { text: '（预览里只有角色卡能改）', calls: [] };
 }
+
+// ----- AI 迭代 (character card only, scripted) -------------------------------
+const cardLive = () => ({
+    character: { name: '林栖', description: '港口灯塔守夜人的女儿。', personality: '说话温柔，常常主动关心别人，喜欢开玩笑缓和气氛。', scenario: '雾港', mes_example: '' },
+    lorebooks: { 雾港: { entries: { 1: { uid: 1, key: ['北码头'], comment: '北码头', content: '雾最浓的地方。' } } } },
+});
+let saved = cardLive();
+export const iterate = {
+    scopes: async () => ({ memory: { global: true, character: !noChar }, orch: { global: true, character: !noChar }, preset: { global: true, character: false }, card: { global: false, character: !noChar } }),
+    async load(ws) { return { live: structuredClone(ws === 'card' ? saved : { note: '预览里只有角色卡能改' }), target: {}, title: ws === 'card' ? '「林栖」的角色卡 · 1 本世界书' : '（预览）' }; },
+    async systemPrompt() { return 'preview'; },
+    async tools() { return [{ type: 'function', function: { name: 'set', parameters: {} } }]; },
+    isRead: (ws, n) => n === 'read',
+    async runRead() { return {}; },
+    async runEdit(ws, call, live) {
+        const next = structuredClone(live);
+        if (call.args.field) next.character[call.args.field] = call.args.value;
+        if (call.args.entry) next.lorebooks.雾港.entries[call.args.entry.uid] = call.args.entry;
+        return next;
+    },
+    units: (ws, live) => (ws === 'card' ? adapters.cardUnits(live) : new Map()),
+    rebuild: (ws, base, ai, keys) => adapters.cardRebuild(base, ai, keys),
+    async commit(ws, target, base, next) { const prev = saved; saved = structuredClone(next); return { async undo() { saved = prev; } }; },
+    async lastReply() { return '（第 3 楼）别担心，有我在呢～'; },
+};
+import * as adapters from '../src/model/adapters.js';
+
+const _askRequest = aiRequest;
+export async function aiRequestAll(role, opts) { return _askRequest(role, opts); }

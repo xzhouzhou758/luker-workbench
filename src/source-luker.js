@@ -637,3 +637,5 @@ export async function askOverview() {
         调试日志开关: debugLoggingOn() === null ? '未知' : debugLoggingOn() ? '开' : '关',
     };
 }
+
+export { iterate } from './source-iterate.js';

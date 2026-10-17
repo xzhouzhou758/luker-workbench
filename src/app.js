@@ -18,6 +18,7 @@ import { createAskPage } from './pages/ask.js';
 import { createIteratePage } from './pages/iterate.js';
 import { createHistoryPage } from './pages/history.js';
 import { formatTokens } from './util.js';
+import { createHistory } from './model/history.js';
 
 const PAGES = [
     { id: 'home', label: '总览', iconName: 'home' },
@@ -56,8 +57,11 @@ export function mountWorkbench({ source, container = document.body, onClose = nu
     const toast = h('div', { class: 'wb-toast', role: 'status', 'aria-live': 'polite', hidden: true });
     put(win.layer, toast);
 
+    const history = createHistory();
     const app = {
         source,
+        history,
+        refreshBadges() { computeSuggestions(); paintRail(); pages.home?.onSnapshot?.(); },
         layer: win.layer,
         snapshot: () => snapshot,
         settings: () => settings,

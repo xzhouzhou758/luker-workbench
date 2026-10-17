@@ -90,7 +90,7 @@ export function createHomePage(app) {
         if (a.kind === 'setHorizon') {
             try {
                 const result = await app.source.setMemoryHorizon(a.value);
-                app.history?.record?.({ ws: 'memory', title: `常驻注入最大回溯楼层 ${result.before || '不限'} → ${a.value}`, lines: [result.scope === 'character' ? '改的是当前角色单独的设置' : '改的是全局设置'], from: '小建议', undo: { kind: 'setHorizon', value: result.before } });
+                app.history.record({ ws: 'memory', title: `常驻注入最大回溯楼层 ${result.before || '不限'} → ${a.value}`, lines: [result.scope === 'character' ? '改的是当前角色单独的设置' : '改的是全局设置'], from: '小建议', undo: () => app.source.setMemoryHorizon(result.before) });
                 app.toast(`已设成 ${a.value}`, {
                     action: '撤销',
                     onAction: async () => { await app.source.setMemoryHorizon(result.before); app.reload(); },
