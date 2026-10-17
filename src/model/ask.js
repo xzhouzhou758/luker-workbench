@@ -88,8 +88,9 @@ const SYSTEM = [
     '5. 这是排查和解释的工作，不是写故事；忽略生成预设里关于文风、扮演、篇幅的要求。',
 ].join('\n');
 
-export function askSystemPrompt({ builtin = true } = {}) {
-    return builtin ? SYSTEM : SYSTEM.split('\n').slice(0, 3).join('\n');
+/** 问问 always uses this prompt (it is the workbench's own; no Luker equivalent). */
+export function askSystemPrompt() {
+    return SYSTEM;
 }
 
 /** First user message: the question plus a compact overview. */
@@ -105,14 +106,14 @@ export function clip(value, max = MAX_TOOL_CHARS) {
 /**
  * Runs one question to completion.
  * @param {{ question, overview, readers: Record<string, (args) => Promise<any>>, request(messages, tools) => Promise<{text, calls}>,
- *           sources?, builtin?, history?: object[], onStep?(step), signal? }} opts
+ *           sources?, history?: object[], onStep?(step), signal? }} opts
  *   history: earlier { role, content } turns of this conversation (question/answer text only).
  * @returns {Promise<{ answer: string, suggest: string, fixPrompt: string, requestIds: string[], reads: { name, args, chars }[], sent: number }>}
  */
-export async function runAsk({ question, overview, readers, request, sources = {}, builtin = true, history = [], onStep = null, signal = null }) {
+export async function runAsk({ question, overview, readers, request, sources = {}, history = [], onStep = null, signal = null }) {
     const tools = askTools(sources);
     const messages = [
-        { role: 'system', content: askSystemPrompt({ builtin }) },
+        { role: 'system', content: askSystemPrompt() },
         ...history,
         { role: 'user', content: askUserMessage(question, overview) },
     ];

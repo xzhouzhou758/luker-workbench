@@ -1,6 +1,6 @@
 # CLAUDE.md — 工作台（luker-workbench）
 
-Luker 第三方扩展：一个可拖动的浮动窗口，汇总四个 AI 工作台（记忆图、编排、预设、角色卡）。姊妹项目 memory-lens、orchestra-lens（`../`），风格和约定沿用它们。当前版本 0.1.1（待真机验收）。
+Luker 第三方扩展：一个可拖动的浮动窗口，汇总四个 AI 工作台（记忆图、编排、预设、角色卡）。姊妹项目 memory-lens、orchestra-lens（`../`），风格和约定沿用它们。当前版本 0.1.2（待真机验收）。
 
 ## 用户的硬性要求
 
@@ -50,6 +50,12 @@ docs/                  接口调查与取舍.md、给原作者的接口问题.md
 - [x] AI 迭代：四个适配器（source-iterate.js），改动清单按「单元」比较（model/units.js、model/adapters.js）
 - [x] 改动记录 + 撤销（model/history.js；撤销函数只在本次页面加载内有效）
 - [ ] 真机验收（用户）
+
+## 提示词与生成预设
+
+- 问问：工作台内置提示词（model/ask.js SYSTEM），固定使用。
+- 四个工作台：用 Luker 各自内置的迭代提示词（用户改过就用改过的）——记忆图 schemaIterSystemPrompt / DEFAULT_SCHEMA_ITER_SYSTEM_PROMPT；编排 requestSystemPrompt / defaults.js getDefaultRequestSystemPrompt（只取通用部分，mode block 引用 luker_orch_* 工具，不用）+ 工作台的工具说明；预设 iterBaseSystemPrompt / buildModelSystemPrompt；角色卡 editorIterationSystemPrompt / studio.js DEFAULT_SYSTEM_PROMPT。设置页「提示词」可看全文。「在前面加一段工作台说明」= settings.builtinPrompt。
+- 生成预设优先级：工作台里单独选的 > 原插件的 requestLlmPresetName（「跟随插件」）> 工作台默认 > Luker 自带 plugin-only（存在时）。没有 plugin-only 时设置页提示导入（同 preset-help.js：fetch /presets/plugin-only.json → savePreset）。agent-director / agent-non-director 是给编排运行时助手用的，迭代不用。
 
 ## AI 迭代要点
 

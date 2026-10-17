@@ -61,8 +61,20 @@ export async function setMemoryHorizon(value) {
     return { before, scope: 'global' };
 }
 
+let presetNames = ['默认', '写作-长回复'];
 export async function listAiChoices() {
-    return { connections: ['DeepSeek 官方', 'Claude（中转）', '本地 Ollama'], presets: ['plugin-only', '默认', '写作-长回复'] };
+    return {
+        connections: ['DeepSeek 官方', 'Claude（中转）', '本地 Ollama'],
+        presets: presetNames,
+        hasPluginOnly: presetNames.includes('plugin-only'),
+        native: { memory: { connection: 'DeepSeek 官方', preset: '' }, orch: { connection: '', preset: '' }, preset: { connection: '', preset: '' }, card: { connection: '', preset: '' } },
+    };
+}
+export async function importBundledPreset(name) { presetNames = [name, ...presetNames]; return name; }
+export async function promptInfo(role) {
+    if (role === 'ask') { const { askSystemPrompt } = await import('../src/model/ask.js'); return { from: '工作台内置', custom: false, text: askSystemPrompt() }; }
+    const where = { memory: '记忆图设置里的「Schema 迭代系统提示词」', orch: '编排设置里的「AI 迭代系统提示词」（通用部分；工作台另附自己的工具说明）', preset: '预设助手设置里的「迭代基础提示词」', card: '角色卡助手设置里的「编辑迭代提示词」' }[role];
+    return { from: `Luker 内置 · ${where}`, custom: role === 'card', text: 'You are …（预览里不显示 Luker 的原文）' };
 }
 
 export async function aiTest() {

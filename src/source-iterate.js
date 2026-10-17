@@ -146,11 +146,22 @@ const ORCH_TOOLS = [
     fn('wb_orch_replace_text', 'Replace one exact passage inside a text field. old_text must be copied verbatim and occur exactly once.', { agent_id: AGENT, field: FIELD, old_text: { type: 'string' }, new_text: { type: 'string' } }, ['agent_id', 'field', 'old_text', 'new_text']),
     fn('wb_orch_set_field', 'Replace the whole value of a field. Prefer wb_orch_replace_text for long prompts.', { agent_id: AGENT, field: FIELD, value: { type: 'string' } }, ['agent_id', 'field', 'value']),
 ];
-const ORCH_PROMPT = [
-    '你是 Luker「多智能体编排」的调优助手。编排在用户每次发消息时运行：几位助手（各有角色设定和任务模板）分工读聊天、查资料、规划，最后把写作指引交给主模型（导演模式由主笔直接写回复）。',
-    '你能改每位助手的 system（角色设定）、task（任务模板，含 {{recent_chat}} 之类的宏）、description（导演模式子助手说明）、api（连接配置名）、preset（生成预设名）。增删助手、调整步骤和工具开关不在这里做，需要时告诉用户去原生面板。',
-    '先用 wb_orch_read_agent 读全文，再用 wb_orch_replace_text 精确替换一段；整段重写才用 wb_orch_set_field。保留已有的宏、格式约束和后面助手依赖的输出结构。',
+// The orchestrator's own iteration tools are not exported, so only its
+// mode-agnostic base prompt (settings.requestSystemPrompt or the default) is
+// reused; the mode blocks name luker_orch_* tools we do not offer.
+const ORCH_TOOL_NOTE = [
+    '## Tools available in this session (they replace the luker_orch_* tools)',
+    '- You can edit, per agent: system (role prompt), task (task template, keep macros like {{recent_chat}}), description (director sub-agent description), api (connection profile name), preset (chat completion preset name). Adding / removing agents, stages or tool switches is not possible here — tell the user to use the native orchestrator panel for that.',
+    '- Read first with wb_orch_overview / wb_orch_read_agent, then patch with wb_orch_replace_text (old_text verbatim, occurring once); use wb_orch_set_field only for a full rewrite. Keep macros, output formats and the structure later agents depend on.',
 ].join('\n');
+
+async function orchBasePrompt() {
+    const s = getContext().extensionSettings?.orchestrator || {};
+    const custom = String(s.requestSystemPrompt || '').trim();
+    if (custom) return { text: custom, custom: true };
+    const d = await load(`${ORCH}/defaults.js`).catch(() => null);
+    return { text: String(d?.getDefaultRequestSystemPrompt?.() || ''), custom: false };
+}
 
 function resolveOrch(ctx, scope) {
     const settings = ctx.extensionSettings?.orchestrator;
@@ -186,7 +197,8 @@ const orch = {
         return { live: { mode: r.mode, profile: r.profile }, target: { scope, mode: r.mode, presetId: r.presetId, avatar: r.avatar || '', index: r.index }, title: `${scope === 'character' ? '角色单独的' : '全局'}方案「${String(r.name).replace(/^Default/i, '默认')}」` };
     },
     async prompt(live) {
-        const lines = [ORCH_PROMPT, '', `执行模式：${live.mode}`, '助手：'];
+        const base = await orchBasePrompt();
+        const lines = [base.text, '', ORCH_TOOL_NOTE, '', `Execution mode: ${live.mode}`, 'Agents:'];
         for (const id of listAgents(live.mode, live.profile)) lines.push(`- ${id}（${agentName(id)}）：${agentFields(live.mode, live.profile, id).map(f => FIELD_LABELS[f]).join('、')}`);
         return lines.join('\n');
     },
@@ -275,7 +287,7 @@ const preset = {
         const sp = await load(`${CPA}/cpa-iteration/system-prompts.js`);
         const s = getContext().extensionSettings?.completion_preset_assistant;
         const base = String(s?.iterBaseSystemPrompt || '').trim();
-        return base ? `${base}\n\n${sp.buildPresetStructureGuideText?.() || ''}` : sp.buildModelSystemPrompt({ mode: 'general' });
+        return base || sp.buildModelSystemPrompt({ mode: 'general' });
     },
     async tools() {
         const t = await load(`${CPA}/cpa-iteration/tools.js`);
@@ -392,6 +404,28 @@ const card = {
 };
 
 export const ADAPTERS = { memory, orch, preset, card };
+
+const PROMPT_SOURCES = {
+    memory: ['记忆图', 'schemaIterSystemPrompt', '记忆图设置里的「Schema 迭代系统提示词」'],
+    orch: ['编排', 'requestSystemPrompt', '编排设置里的「AI 迭代系统提示词」（通用部分；工作台另附自己的工具说明）'],
+    preset: ['预设助手', 'iterBaseSystemPrompt', '预设助手设置里的「迭代基础提示词」'],
+    card: ['角色卡助手', 'editorIterationSystemPrompt', '角色卡助手设置里的「编辑迭代提示词」'],
+};
+
+/** Which Luker prompt a workbench uses, and whether the user customised it. */
+export async function promptInfo(ws) {
+    const [, key, where] = PROMPT_SOURCES[ws];
+    const live = ws === 'orch' ? { mode: 'spec', profile: {} } : null;
+    const text = await ADAPTERS[ws].prompt(live);
+    const plugin = { memory: 'memory_graph', orch: 'orchestrator', preset: 'completion_preset_assistant', card: 'character_editor_assistant' }[ws];
+    const stored = String(getContext().extensionSettings?.[plugin]?.[key] || '').trim();
+    let custom = false;
+    if (ws === 'orch') custom = (await orchBasePrompt()).custom;
+    else if (ws === 'memory') { const sp = await load(`${MG}/schema-iteration/system-prompt.js`).catch(() => null); custom = Boolean(stored) && stored !== String(sp?.DEFAULT_SCHEMA_ITER_SYSTEM_PROMPT || '').trim(); }
+    else if (ws === 'preset') { const sp = await load(`${CPA}/cpa-iteration/system-prompts.js`).catch(() => null); custom = Boolean(stored) && stored !== String(sp?.buildBaseSystemPrompt?.() || '').trim(); }
+    else if (ws === 'card') { const st = await load(`${CEA}/editor-iteration/studio.js`).catch(() => null); custom = Boolean(stored) && stored !== String(st?.DEFAULT_SYSTEM_PROMPT || '').trim(); }
+    return { from: `Luker 内置 · ${where}`, custom, text };
+}
 
 export async function adapterScopes() {
     const ctx = getContext();

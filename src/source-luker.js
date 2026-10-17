@@ -343,6 +343,16 @@ export function openLens(which) {
 const loadRunner = lazy('/scripts/iteration-library/runner.js');
 const loadProfiles = lazy('/scripts/extensions/connection-manager/profile-resolver.js');
 
+// Each workbench's own plugin already has an 「迭代 AI」 connection + preset;
+// a row left on 「跟随」 uses that first, then the workbench default.
+const NATIVE_AI = { memory: 'memory_graph', orch: 'orchestrator', preset: 'completion_preset_assistant', card: 'character_editor_assistant' };
+export const BUNDLED_PRESETS = ['plugin-only', 'agent-director', 'agent-non-director'];
+
+function nativeAi(role, ctx = getContext()) {
+    const s = ctx.extensionSettings?.[NATIVE_AI[role]];
+    return s ? { connection: String(s.requestApiPresetName || '').trim(), preset: String(s.requestLlmPresetName || '').trim() } : { connection: '', preset: '' };
+}
+
 /** Connection profiles and chat-completion presets the user can pick. */
 export async function listAiChoices() {
     const ctx = getContext();
@@ -356,14 +366,53 @@ export async function listAiChoices() {
         const names = ctx.getPresetManager?.('openai')?.getAllPresets?.();
         presets = Array.isArray(names) ? [...new Set(names.map(n => String(n || '').trim()).filter(Boolean))] : [];
     } catch { presets = []; }
-    return { connections: [...new Set(connections)], presets };
+    const native = Object.fromEntries(Object.keys(NATIVE_AI).map(role => [role, nativeAi(role, ctx)]));
+    return { connections: [...new Set(connections)], presets, native, hasPluginOnly: presets.includes('plugin-only') };
+}
+
+/** Imports one of Luker's bundled presets (public/presets/<name>.json) the same way its 「?」 help popup does. */
+export async function importBundledPreset(name = 'plugin-only') {
+    if (!BUNDLED_PRESETS.includes(name)) throw new SourceError('bad-name', '不认识的预设');
+    const manager = getContext().getPresetManager?.('openai');
+    if (!manager?.savePreset) throw new SourceError('unsupported', '预设管理器不可用');
+    const res = await fetch(`/presets/${name}.json`);
+    if (!res.ok) throw new SourceError('download', `下载「${name}」失败（HTTP ${res.status}）`);
+    const data = await res.json();
+    if (data && typeof data === 'object') data.name = name;
+    await manager.savePreset(name, data);
+    return name;
 }
 
 /** Effective { apiPresetName, llmPresetName } for a role ('ask' | 'memory' | 'orch' | 'preset' | 'card'). */
+function hasPreset(name) {
+    try { return (getContext().getPresetManager?.('openai')?.getAllPresets?.() || []).map(n => String(n).trim()).includes(name); } catch { return false; }
+}
+
+/** Default generation preset when none is picked: Luker's plugin-only if installed. */
+export function defaultPreset(settings = readSettings()) {
+    const picked = String(settings.ai?.default?.preset || '').trim();
+    if (picked) return picked;
+    return hasPreset('plugin-only') ? 'plugin-only' : '';
+}
+
 export function aiTarget(role, settings = readSettings()) {
     const own = settings.ai?.[role] || {};
     const def = settings.ai?.default || {};
-    return { apiPresetName: String(own.connection || def.connection || '').trim(), llmPresetName: String(own.preset || def.preset || '').trim() };
+    const nat = NATIVE_AI[role] ? nativeAi(role) : { connection: '', preset: '' };
+    return {
+        apiPresetName: String(own.connection || nat.connection || def.connection || '').trim(),
+        llmPresetName: String(own.preset || nat.preset || defaultPreset(settings) || '').trim(),
+    };
+}
+
+/** System prompt each role uses, for the settings page: { from, custom, text }. */
+export async function promptInfo(role) {
+    if (role === 'ask') {
+        const { askSystemPrompt } = await import('./model/ask.js');
+        return { from: '工作台内置', custom: false, text: askSystemPrompt() };
+    }
+    const { promptInfo: info } = await import('./source-iterate.js');
+    return info(role);
 }
 
 /**

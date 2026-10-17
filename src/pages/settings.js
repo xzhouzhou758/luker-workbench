@@ -44,13 +44,19 @@ export function createSettingsPage(app) {
         const s = app.settings();
         if (!choices) return loading('读取连接配置…');
         const opts = (list, first) => [{ value: '', label: first }, ...list.map(name => ({ value: name, label: name }))];
+        const nativeLabel = (key, field) => {
+            const n = choices.native?.[key]?.[field];
+            return n ? `跟随插件（${n}）` : '跟随默认';
+        };
         const row = (key, label, tone, isDefault = false) => {
             const cur = s.ai?.[key] || {};
-            const first = isDefault ? '用 Luker 当前的' : '跟随默认';
+            const first = (field) => (isDefault
+                ? (field === 'preset' ? (choices.hasPluginOnly ? 'plugin-only（Luker 推荐）' : '用 Luker 当前选中的') : '用 Luker 当前的')
+                : nativeLabel(key, field));
             return h('tr', null,
                 h('td', null, tone ? dot(tone) : null, isDefault ? h('b', { text: label }) : h('span', { text: label })),
-                h('td', null, select(opts(choices.connections, first), cur.connection || '', (v) => edit(n => { n.ai[key].connection = v; }), { ariaLabel: `${label} 连接配置`, follow: true })),
-                h('td', null, select(opts(choices.presets, first), cur.preset || '', (v) => edit(n => { n.ai[key].preset = v; }), { ariaLabel: `${label} 生成预设`, follow: true })));
+                h('td', null, select(opts(choices.connections, first('connection')), cur.connection || '', (v) => edit(n => { n.ai[key].connection = v; }), { ariaLabel: `${label} 连接配置`, follow: true })),
+                h('td', null, select(opts(choices.presets, first('preset')), cur.preset || '', (v) => edit(n => { n.ai[key].preset = v; }), { ariaLabel: `${label} 生成预设`, follow: true })));
         };
         return h('div', { class: 'wb-list' }, h('table', { class: 'wb-api' },
             h('thead', null, h('tr', null, h('th'), h('th', { text: '连接配置' }), h('th', { text: '生成预设' }))),
@@ -78,10 +84,11 @@ export function createSettingsPage(app) {
             h('section', null,
                 sectionTitle('AI 接口', testing ? h('span', { class: 'wb-note', text: '测试中…' }) : link('测试默认', () => test())),
                 aiTable(),
-                h('p', { class: 'wb-note wb-api-note', text: '连接配置决定用哪个模型、哪个地址；生成预设决定请求外面包的提示词（破限内容在这里，会照常带上）。两项都来自 Luker 自己的列表，工作台只是选用，不会改动它们。' }),
+                h('p', { class: 'wb-note wb-api-note', text: '连接配置决定用哪个模型、哪个地址；生成预设决定请求外面包的提示词（破限内容在这里，会照常带上）。默认生成预设不选时用 Luker 自带的 plugin-only；「跟随插件」= 用记忆图 / 编排 / 预设助手 / 角色卡助手自己设置里的「迭代 AI」那一项。两项都来自 Luker 自己的列表，工作台只是选用，不会改动它们。' }),
+                presetHint(),
                 h('div', { class: 'wb-checks' },
-                    checkRow({ checked: s.builtinPrompt, label: '使用内置的迭代提示词', note: '告诉 AI 这是在改设定，不是写故事，避免预设的文风干扰', onChange: (v) => edit(n => { n.builtinPrompt = v; }) }),
                     checkRow({ checked: s.reviewChanges, label: '改动先给我看，不要直接应用', onChange: (v) => edit(n => { n.reviewChanges = v; }) }))),
+            promptSection(),
             h('section', null,
                 sectionTitle('问问'),
                 h('div', { class: 'wb-list' },
@@ -112,6 +119,57 @@ export function createSettingsPage(app) {
                 checkRow({ checked: s.rules[rule.id] ?? rule.defaultOn, ariaLabel: rule.name, onChange: (v) => edit(n => { n.rules[rule.id] = v; }) })))));
     }
 
+    // Luker ships plugin-only.json for plugin / iteration AI calls: a clean
+    // envelope that separates the task from RP context. Recommend it here.
+    function presetHint() {
+        if (!choices) return null;
+        const s = app.settings();
+        if (choices.hasPluginOnly) return null;
+        return h('div', { class: 'wb-hint' },
+            h('div', null,
+                h('b', { text: '还没有 Luker 自带的「plugin-only」预设' }),
+                h('div', { class: 'wb-note', text: '这是 Luker 专门给插件和迭代 AI 准备的预设，把「这是工具任务」和角色扮演内容分开，AI 不容易被文风带跑。导入后工作台默认就用它，你的破限可以照常加在里面。' })),
+            h('div', { class: 'wb-hint-acts' },
+                button('导入', async () => {
+                    try {
+                        await app.source.importBundledPreset('plugin-only');
+                        choices = null;
+                        app.toast('已导入 plugin-only');
+                        ensureChoices();
+                    } catch (err) { app.toast(String(err?.message || err), { error: true }); }
+                }, { className: 'is-primary is-sm' })));
+    }
+
+    let prompts = null;
+    async function loadPrompts() {
+        const roles = ['ask', 'memory', 'orch', 'preset', 'card'];
+        const out = {};
+        for (const r of roles) {
+            try { out[r] = await app.source.promptInfo(r); } catch (err) { out[r] = { from: '读不到', custom: false, text: String(err?.message || err) }; }
+        }
+        prompts = out;
+        paint();
+    }
+
+    function promptSection() {
+        const s = app.settings();
+        const rows = ROWS.map(r => {
+            const p = prompts?.[r.key];
+            return h('details', { class: 'wb-prompt' },
+                h('summary', null,
+                    dot(r.tone),
+                    h('span', { class: 'wb-prompt-name', text: r.label }),
+                    h('span', { class: 'wb-note wb-prompt-from', text: p ? `${p.from}${p.custom ? '（你改过）' : ''}` : '读取中…' })),
+                p ? h('pre', { class: 'wb-prompt-text', text: p.text || '（空）' }) : null);
+        });
+        return h('section', null,
+            sectionTitle('提示词'),
+            h('p', { class: 'wb-sub wb-rules-intro', text: '问问用工作台内置的提示词；四个工作台直接用 Luker 各自内置的迭代提示词（在原插件设置里改过的话，用你改过的）。点开可以看全文。' }),
+            h('div', { class: 'wb-list' }, rows),
+            h('div', { class: 'wb-checks' },
+                checkRow({ checked: s.builtinPrompt, label: '在前面加一段工作台说明', note: '告诉 AI 改动会先进清单、回复用中文短句、这是改设定不是写故事。不影响 Luker 原来的提示词', onChange: (v) => edit(n => { n.builtinPrompt = v; }) })));
+    }
+
     function setRow(name, note, control) {
         return h('div', { class: 'wb-setrow' }, h('div', null, h('div', { class: 'wb-setrow-name', text: name }), note ? h('div', { class: 'wb-note', text: note }) : null), control);
     }
@@ -121,6 +179,7 @@ export function createSettingsPage(app) {
         show(opts = {}) {
             paint();
             ensureChoices();
+            if (!prompts) loadPrompts();
             if (opts.scrollTo === 'rules') requestAnimationFrame(() => el.querySelector('#wb-rules')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
         },
     };

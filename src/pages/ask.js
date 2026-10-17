@@ -189,7 +189,6 @@ export function createAskPage(app) {
                 overview,
                 history,
                 sources: s.ask.sources,
-                builtin: s.builtinPrompt,
                 signal: abort.signal,
                 readers: app.source.askReaders({ redactText: s.ask.redact, suggestions: () => app.suggestions() }),
                 request: (messages, tools) => app.source.aiRequest('ask', { messages, tools, signal: abort.signal }),
