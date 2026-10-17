@@ -38,3 +38,9 @@ test('formatting helpers', () => {
     assert.match(relativeTime(new Date(2025, 5, 9, 23, 40).getTime(), now), /^昨天 23:40$/);
     assert.equal(relativeTime(new Date(2025, 5, 7, 12).getTime(), now), '3 天前');
 });
+
+import { clampPill } from '../src/model/geometry.js';
+test('pill stays on screen', () => {
+    assert.deepEqual(clampPill({ right: -50, bottom: 9999 }, 1280, 800, { width: 220, height: 42 }), { right: 4, bottom: 754 });
+    assert.deepEqual(clampPill({ right: 5000, bottom: 10 }, 390, 844, { width: 220, height: 42 }), { right: 166, bottom: 10 });
+});

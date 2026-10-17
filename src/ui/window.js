@@ -1,25 +1,28 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
 // The floating window: title bar (drag, double-click to maximise), resize
-// grip, maximise / collapse / close, and the collapsed pill. On narrow
-// screens it becomes a bottom sheet over a scrim. The box is remembered.
+// grip, maximise / collapse, and the entry pill. The pill is the workbench's
+// resident entry point: it stays in a corner whenever the window is folded
+// away, can be dragged, and remembers where it was put. On narrow screens
+// the window becomes a bottom sheet over a scrim. Boxes are remembered.
 
 import { h, put, clear } from '../util.js';
 import { icon } from '../icons.js';
 import { iconButton } from './components.js';
 import { fitToViewport } from '../viewport.js';
-import { defaultBox, clampBox, maxBox, sheetBox, pillPos, isCompactWidth, parseSavedBox } from '../model/geometry.js';
+import { defaultBox, clampBox, maxBox, sheetBox, pillPos, clampPill, isCompactWidth, parseSavedBox } from '../model/geometry.js';
 import { loadPrefs, savePrefs } from '../prefs.js';
 
 /**
- * @param {{ title: string, onClose(): void, onThemeToggle(): void, theme: () => string }} options
+ * @param {{ title: string, onThemeToggle(): void, theme: () => string, startCollapsed?: boolean, pillVisible?: () => boolean, onExpand?(): void }} options
  * @returns {{ layer, body, setContext(text), setPill(nodes), collapse(), expand(), isCollapsed(), focus(), destroy() }}
  */
-export function createWindow({ title, onClose, onThemeToggle, theme }) {
+export function createWindow({ title, onThemeToggle, theme, startCollapsed = false, pillVisible = () => true, onExpand = null }) {
     const prefs = loadPrefs();
     let box = parseSavedBox(prefs.box);
     let maximised = Boolean(prefs.maximised);
-    let collapsed = false;
+    let pillAt = prefs.pill && typeof prefs.pill === 'object' ? prefs.pill : null;
+    let collapsed = Boolean(startCollapsed);
     let compact = false;
     let vw = globalThis.innerWidth || 1280;
     let vh = globalThis.innerHeight || 800;
@@ -34,13 +37,12 @@ export function createWindow({ title, onClose, onThemeToggle, theme }) {
         h('span', { class: 'wb-spacer' }),
         themeBtn,
         maxBtn,
-        iconButton('min', '收起', () => collapse()),
-        iconButton('x', '关闭', () => onClose(), { className: 'is-close' }));
+        iconButton('x', '收起到角落', () => collapse(), { className: 'is-close' }));
     const body = h('div', { class: 'wb-body' });
     const grip = h('div', { class: 'wb-resize', 'aria-hidden': 'true' });
     const win = h('section', { class: 'wb-win', role: 'dialog', 'aria-label': title, tabIndex: -1 }, bar, body, grip);
     const scrim = h('div', { class: 'wb-scrim', hidden: true, onClick: () => collapse() });
-    const pill = h('button', { type: 'button', class: 'wb-pill', hidden: true, 'aria-label': `打开${title}`, onClick: () => expand() });
+    const pill = h('button', { type: 'button', class: 'wb-pill', hidden: true, 'aria-label': `打开${title}`, title: `打开${title}（可拖动）` });
     const layer = h('div', { class: 'wbench', dataset: { theme: theme() } }, scrim, win, pill);
 
     function paintTheme() {
@@ -57,13 +59,50 @@ export function createWindow({ title, onClose, onThemeToggle, theme }) {
         put(maxBtn, icon(maximised ? 'restore' : 'max'));
         maxBtn.title = maxBtn.ariaLabel = maximised ? '还原' : '放大';
         win.hidden = collapsed;
-        pill.hidden = !collapsed;
+        pill.hidden = !collapsed || !pillVisible();
         scrim.hidden = !compact || collapsed;
         const b = compact ? sheetBox(vw, vh) : maximised ? maxBox(vw, vh) : (box = clampBox(box || defaultBox(vw, vh), vw, vh));
         Object.assign(win.style, { left: `${b.left}px`, top: `${b.top}px`, width: `${b.width}px`, height: `${b.height}px` });
-        const p = pillPos(vw, vh, compact);
+        placePill();
+    }
+
+    function placePill() {
+        const size = pill.hidden ? undefined : { width: pill.offsetWidth || 200, height: pill.offsetHeight || 42 };
+        const p = clampPill(pillAt || pillPos(vw, vh, compact), vw, vh, size);
         Object.assign(pill.style, { right: `${p.right}px`, bottom: `${p.bottom}px` });
     }
+
+    // ----- Pill: tap opens, drag moves (remembered) -----
+    let dragged = false;
+    pill.addEventListener('pointerdown', (event) => {
+        if (event.button !== 0) return;
+        const start = { x: event.clientX, y: event.clientY, ...clampPill(pillAt || pillPos(vw, vh, compact), vw, vh) };
+        dragged = false;
+        pill.setPointerCapture?.(event.pointerId);
+        const move = (e) => {
+            const dx = e.clientX - start.x;
+            const dy = e.clientY - start.y;
+            if (!dragged && Math.hypot(dx, dy) < 6) return;
+            dragged = true;
+            pill.classList.add('is-dragging');
+            pillAt = clampPill({ right: start.right - dx, bottom: start.bottom - dy }, vw, vh, { width: pill.offsetWidth, height: pill.offsetHeight });
+            Object.assign(pill.style, { right: `${pillAt.right}px`, bottom: `${pillAt.bottom}px` });
+        };
+        const end = () => {
+            pill.classList.remove('is-dragging');
+            pill.removeEventListener('pointermove', move);
+            pill.removeEventListener('pointerup', end);
+            pill.removeEventListener('pointercancel', end);
+            if (dragged) savePrefs({ pill: pillAt });
+        };
+        pill.addEventListener('pointermove', move);
+        pill.addEventListener('pointerup', end);
+        pill.addEventListener('pointercancel', end);
+    });
+    pill.addEventListener('click', () => {
+        if (dragged) { dragged = false; return; }
+        expand();
+    });
 
     const persist = () => savePrefs({ box, maximised });
 
@@ -140,6 +179,7 @@ export function createWindow({ title, onClose, onThemeToggle, theme }) {
         collapsed = false;
         apply();
         win.focus();
+        onExpand?.();
     }
 
     paintTheme();
@@ -157,7 +197,9 @@ export function createWindow({ title, onClose, onThemeToggle, theme }) {
         setPill(...nodes) {
             clear(pill);
             put(pill, h('span', { class: 'wb-mark', 'aria-hidden': 'true' }, icon('mark', { size: 15 })), ...nodes);
+            requestAnimationFrame(placePill);
         },
+        refresh: apply,
         collapse,
         expand,
         toggle: () => (collapsed ? expand() : collapse()),

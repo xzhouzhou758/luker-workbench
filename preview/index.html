@@ -33,9 +33,10 @@
     localStorage.setItem('workbench.prefs.v1', JSON.stringify(prefs));
     let handle = null;
     const open = () => { if (handle) handle.expand(); else handle = mountWorkbench({ source, onClose: () => { handle = null; } }); };
+    const startCollapsed = params.get('pill') === '1';
     document.getElementById('open').onclick = open;
     addEventListener('keydown', (e) => { if (e.altKey && e.code === 'KeyW') { e.preventDefault(); handle ? handle.toggle() : open(); } });
-    open();
+    if (startCollapsed) handle = mountWorkbench({ source, startCollapsed: true, onClose: () => { handle = null; } }); else open();
     window.__wb = () => handle;
 </script>
 </body>

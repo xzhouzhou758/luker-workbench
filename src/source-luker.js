@@ -76,6 +76,7 @@ export const DEFAULT_SETTINGS = {
     dismissed: {},
     ask: { sources: { inspector: true, frontLogs: true, serverLogs: true, content: true, plugins: true }, floors: 2, previewBeforeSend: false, redact: true },
     hotkey: 'alt+w',
+    pill: true,
 };
 
 function merge(base, extra) {

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
 // Workbench (工作台) — Luker entry point.
-//   - wand-menu item and Alt+W → the floating window (loaded lazily)
+//   - a resident pill in the bottom-right corner (mounted once Luker is ready),
+//     wand-menu item and Alt+W → the floating window
 //   - an orchestrator run recorder from load time, so 小建议 has history
 //     even before the window is first opened (skipped if orchestra-lens is
 //     installed: its own history is read instead)
@@ -10,30 +11,34 @@ const MENU_ID = 'luker_workbench_wand_item';
 let handle = null;
 let opening = null;
 
-async function open() {
-    if (handle) {
-        handle.expand();
-        return;
-    }
+async function mount({ collapsed }) {
+    if (handle) return handle;
     if (opening) return opening;
     opening = (async () => {
         const [{ mountWorkbench }, source] = await Promise.all([
             import('./src/app.js'),
             import('./src/source-luker.js'),
         ]);
-        handle = mountWorkbench({ source, onClose: () => { handle = null; } });
+        handle = mountWorkbench({ source, startCollapsed: collapsed, onClose: () => { handle = null; } });
+        return handle;
     })();
     try {
-        await opening;
+        return await opening;
     } catch (err) {
         console.error('[workbench] failed to open', err);
         globalThis.toastr?.error?.(String(err?.message || err), '工作台');
+        return null;
     } finally {
         opening = null;
     }
 }
 
-function toggle() {
+async function open() {
+    const h = handle || await mount({ collapsed: false });
+    h?.expand();
+}
+
+async function toggle() {
     if (!handle) return open();
     handle.toggle();
     return null;
@@ -95,5 +100,19 @@ if (!addMenuItem()) {
 import('./src/source-luker.js')
     .then(({ startOrchRecorder }) => startOrchRecorder())
     .catch(err => console.info('[workbench] orchestrator recorder not started:', err?.message || err));
+
+// Resident pill: mount folded once Luker's UI is up.
+function mountPill() {
+    if (!handle && !opening) mount({ collapsed: true });
+}
+try {
+    // APP_READY is an auto-fire event: late listeners are called right away.
+    const ctx = globalThis.Luker?.getContext?.() || globalThis.SillyTavern?.getContext?.();
+    const ready = ctx?.eventTypes?.APP_READY;
+    if (ready && ctx.eventSource?.on) ctx.eventSource.on(ready, mountPill);
+    else setTimeout(mountPill, 3000);
+} catch {
+    setTimeout(mountPill, 3000);
+}
 
 globalThis.LukerWorkbench = Object.freeze({ open, close, toggle });

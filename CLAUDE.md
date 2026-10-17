@@ -1,6 +1,6 @@
 # CLAUDE.md — 工作台（luker-workbench）
 
-Luker 第三方扩展：一个可拖动的浮动窗口，汇总四个 AI 工作台（记忆图、编排、预设、角色卡）。姊妹项目 memory-lens、orchestra-lens（`../`），风格和约定沿用它们。当前版本 0.1.0（首版，待真机验收）。
+Luker 第三方扩展：一个可拖动的浮动窗口，汇总四个 AI 工作台（记忆图、编排、预设、角色卡）。姊妹项目 memory-lens、orchestra-lens（`../`），风格和约定沿用它们。当前版本 0.1.1（待真机验收）。
 
 ## 用户的硬性要求
 
@@ -44,6 +44,7 @@ docs/                  接口调查与取舍.md、给原作者的接口问题.md
 
 ## 进度
 
+- [x] 右下角常驻胶囊（加载即挂载、折叠；点开窗口，× 收回胶囊；可拖动，位置存 prefs.pill；设置里可关）
 - [x] 窗口、总览（占用条 / 待处理 / 四张卡片）、设置、小建议
 - [x] 问问（src/model/ask.js 工具 + 循环；读取器 source-luker.js askReaders；请求来源推测 model/requests.js）
 - [x] AI 迭代：四个适配器（source-iterate.js），改动清单按「单元」比较（model/units.js、model/adapters.js）

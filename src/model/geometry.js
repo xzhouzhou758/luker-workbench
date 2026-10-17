@@ -40,9 +40,16 @@ export function sheetBox(vw, vh) {
     return { left: 0, top: vh - height, width: vw, height };
 }
 
-/** Where the collapsed pill sits (bottom-right, above the phone home bar). */
+/** Where the entry pill sits by default (bottom-right, above Luker's input bar on phones). */
 export function pillPos(vw, vh, compact) {
-    return compact ? { right: 12, bottom: 76 } : { right: 18, bottom: 18 };
+    return compact ? { right: 12, bottom: 96 } : { right: 18, bottom: 18 };
+}
+
+/** Keeps a dragged pill on screen (offsets from the right / bottom edges). */
+export function clampPill(pos, vw, vh, size = { width: 200, height: 42 }) {
+    const right = Math.round(Math.min(Math.max(Number(pos?.right) || 0, 4), Math.max(4, vw - Math.min(size.width, vw) - 4)));
+    const bottom = Math.round(Math.min(Math.max(Number(pos?.bottom) || 0, 4), Math.max(4, vh - size.height - 4)));
+    return { right, bottom };
 }
 
 export function isCompactWidth(vw) {

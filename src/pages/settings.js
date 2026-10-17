@@ -94,8 +94,9 @@ export function createSettingsPage(app) {
             h('section', null,
                 sectionTitle('窗口'),
                 h('div', { class: 'wb-list' },
+                    setRow('右下角的入口', '常驻在角落：显示提示词用量和待处理数，点一下打开，可以拖到别处', checkRow({ checked: s.pill !== false, label: '显示', onChange: (v) => edit(n => { n.pill = v; }) })),
                     setRow('快捷键', '也可以从魔杖菜单打开', select([{ value: 'alt+w', label: 'Alt + W' }, { value: '', label: '不用快捷键' }], s.hotkey, (v) => edit(n => { n.hotkey = v; }), { ariaLabel: '快捷键' })),
-                    setRow('窗口位置和大小', '拖动标题栏移动，右下角拉大小，双击标题栏放大', button('恢复默认', () => { try { localStorage.removeItem('workbench.prefs.v1'); } catch { /* ignore */ } app.toast('下次打开时生效'); }, { className: 'is-sm' })))),
+                    setRow('窗口和入口的位置', '拖动标题栏移动，右下角拉大小，双击标题栏放大', button('恢复默认', () => { try { const p = JSON.parse(localStorage.getItem('workbench.prefs.v1') || '{}'); delete p.box; delete p.pill; delete p.maximised; localStorage.setItem('workbench.prefs.v1', JSON.stringify(p)); } catch { /* ignore */ } app.toast('刷新页面后生效'); }, { className: 'is-sm' })))),
             rulesSection());
     }
 

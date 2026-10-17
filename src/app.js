@@ -32,9 +32,10 @@ function detectTheme() {
 }
 
 /**
- * @param {{ source: object, container?: HTMLElement, onClose?: () => void }} options
+ * @param {{ source: object, container?: HTMLElement, onClose?: () => void, startCollapsed?: boolean }} options
+ *   startCollapsed: mount as the corner pill only (the resident entry point).
  */
-export function mountWorkbench({ source, container = document.body, onClose = null }) {
+export function mountWorkbench({ source, container = document.body, onClose = null, startCollapsed = false }) {
     const prefs = loadPrefs();
     let theme = prefs.theme === 'light' || prefs.theme === 'dark' ? prefs.theme : detectTheme();
     let page = PAGES.some(p => p.id === prefs.page) || prefs.page === 'settings' ? prefs.page : 'home';
@@ -45,11 +46,18 @@ export function mountWorkbench({ source, container = document.body, onClose = nu
     let destroyed = false;
     let toastTimer = 0;
 
+    let shown = !startCollapsed;
     const win = createWindow({
         title: '工作台',
         theme: () => theme,
         onThemeToggle: () => { theme = theme === 'dark' ? 'light' : 'dark'; savePrefs({ theme }); },
-        onClose: () => close(),
+        startCollapsed,
+        pillVisible: () => settings.pill !== false,
+        onExpand: () => {
+            // First open from the pill: paint the page now.
+            if (!shown) { shown = true; showPage(); }
+            load();
+        },
     });
     const rail = h('nav', { class: 'wb-rail', role: 'tablist', 'aria-label': '工作台' });
     const main = h('main', { class: 'wb-main' });
@@ -79,6 +87,7 @@ export function mountWorkbench({ source, container = document.body, onClose = nu
             source.writeSettings(next);
             computeSuggestions();
             paintRail();
+            win.refresh();
         },
         toast: showToast,
         reload: () => load(),
@@ -178,14 +187,17 @@ export function mountWorkbench({ source, container = document.body, onClose = nu
 
     container.appendChild(win.layer);
     paintRail();
-    showPage();
+    if (shown) {
+        showPage();
+        win.focus();
+    }
     load();
-    win.focus();
 
     return {
         close,
         toggle: () => win.toggle(),
         expand: () => win.expand(),
+        collapse: () => win.collapse(),
         isCollapsed: () => win.isCollapsed(),
         reload: () => load(),
     };
