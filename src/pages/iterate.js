@@ -8,9 +8,9 @@
 // Scope rules: 记忆图 / 编排 = 全局 or 当前角色卡; 预设 = 全局 only;
 // 角色卡 = 当前角色卡 only; 世界书 = 全局启用的书 or 当前角色的书. No character (or a group chat) = 未选择角色卡.
 
-import { h, put, clear, relativeTime } from '../util.js';
+import { h, put, clear, relativeTime, copyText } from '../util.js';
 import { icon } from '../icons.js';
-import { button, iconButton, checkRow, segmented, dot } from '../ui/components.js';
+import { button, iconButton, checkRow, segmented, dot, msgActions } from '../ui/components.js';
 import { renderMarkdown } from '../ui/markdown.js';
 import { changeList } from '../ui/change-list.js';
 import { diffUnits } from '../model/units.js';
@@ -162,7 +162,8 @@ export function createIteratePage(app) {
                 h('b', { text: `和 AI 一起改${WS_NAME[ws]}` }),
                 h('div', { text: loadError || (w ? `要改的是：${w.title}。说说哪里不满意，AI 会改好放进改动清单，你勾选后再应用。` : '说说哪里不满意，AI 会改好放进改动清单，你勾选后再应用。') })));
         }
-        turns.forEach((t, i) => put(body, t.role === 'user' ? h('div', { class: 'wb-msg-me', text: t.text }) : aiBlock(t, i)));
+        if (session?.forkedFrom) put(body, h('div', { class: 'wb-fork-note', text: `从「${session.forkedFrom}」分出来的对话` }));
+        turns.forEach((t, i) => put(body, t.role === 'user' ? userBlock(t, i) : aiBlock(t, i)));
         if (busy) {
             put(body, h('div', { class: 'wb-msg-ai' },
                 h('div', { class: 'wb-reads is-live' }, h('span', { class: 'wb-spinner', 'aria-hidden': 'true' }), h('span', { text: liveStep || '正在想…' })),
@@ -171,11 +172,75 @@ export function createIteratePage(app) {
         requestAnimationFrame(() => { body.scrollTop = body.scrollHeight; });
     }
 
+    // ----- message actions ------------------------------------------------
+    function userBlock(t, i) {
+        return h('div', { class: 'wb-msg-turn' },
+            h('div', { class: 'wb-msg-me', text: t.text }),
+            msgActions([
+                { iconName: 'copy', label: '复制', done: '已复制', onClick: () => copyText(t.text) },
+                { iconName: 'edit', label: '改了再发', title: '在新的分支里改这句话，原对话不动', disabled: busy, onClick: () => editMessage(i) },
+            ]));
+    }
+
+    function turnText(t) {
+        const lines = [t.error || t.text || ''];
+        if (t.changes?.length) lines.push('', `改动（${t.target || ''}）：`, ...t.changes.map(c => `- ${{ add: '新增', remove: '删除', change: '修改' }[c.kind] || ''}「${c.label}」`));
+        return lines.join('\n').trim();
+    }
+
+    /**
+     * New session holding turns [0, upto). The model history is rebuilt from
+     * the visible text (tool calls are not carried over); pending changes in
+     * the copied turns count as discarded, applied ones stay applied.
+     */
+    function forkAt(upto) {
+        const src = session;
+        const turns = src.turns.slice(0, upto).map(t => (t.state === 'pending' ? { ...t, state: 'discarded' } : t));
+        const messages = turns.flatMap(t => (t.role === 'user'
+            ? [{ role: 'user', content: t.text }]
+            : (t.text || t.changes?.length ? [{ role: 'assistant', content: turnText(t) }] : [])));
+        const w = work.get(keyOf(src.ws, src.scope));
+        if (w) w.ai = structuredClone(w.base);
+        session = store.create({ kind: 'iterate', ws: src.ws, scope: src.scope, scopeName: src.scopeName, title: `${src.title}（分支）`, forkedFrom: src.title, turns, messages,
+            note: '（这段对话是从之前的对话分出来的。前面列出的改动，已应用的已经保存进 Luker，其余没有保存；以现在读到的内容为准。）' });
+        paintAll();
+        return session;
+    }
+
+    function editMessage(i) {
+        const text = session.turns[i].text;
+        forkAt(i);
+        input.value = text;
+        grow();
+        input.focus();
+    }
+
+    const canRegen = (t) => !t.changes?.length || t.state === 'pending' || t.state === 'discarded';
+
+    function regenerate() {
+        const turns = session.turns;
+        const last = turns[turns.length - 1];
+        const q = turns[turns.length - 2];
+        if (busy || !q || q.role !== 'user' || !canRegen(last)) return;
+        const w = work.get(keyOf(session.ws, session.scope));
+        if (w) w.ai = structuredClone(w.base);
+        const keep = Number.isInteger(last.msgKeep) ? last.msgKeep : Math.max(0, (session.messages || []).length - 2);
+        session = store.update(session.id, { turns: turns.slice(0, -2), messages: (session.messages || []).slice(0, keep) });
+        input.value = q.text;
+        send();
+    }
+
     function aiBlock(t, index) {
         const reads = t.reads ? `看了 ${t.reads} 次${t.edits ? `，改了 ${t.edits} 次` : ''}${t.failed ? `，${t.failed} 次没改成` : ''}` : '';
         const node = h('div', { class: 'wb-msg-ai' },
             reads ? h('div', { class: 'wb-reads' }, icon('eye', { size: 12 }), h('span', { text: reads })) : null,
             t.error ? h('div', { class: 'wb-msg-error', text: t.error }) : t.text ? renderMarkdown(t.text) : null);
+        const last = index === session.turns.length - 1;
+        const acts = msgActions([
+            { iconName: 'copy', label: '复制', done: '已复制', disabled: !turnText(t), onClick: () => copyText(turnText(t)) },
+            last ? { iconName: 'refresh', label: '重新回答', title: canRegen(t) ? '放弃这一轮，重新让 AI 改' : '这一轮的改动已经应用，先撤销再重新回答', disabled: busy || !canRegen(t), onClick: () => regenerate() } : null,
+            { iconName: 'fork', label: '从这里分支', title: '复制到这一条为止，开一个新对话接着改', disabled: busy, onClick: () => { forkAt(index + 1); app.toast('已分出新对话，原对话还在对话列表里'); input.focus(); } },
+        ]);
         if (t.changes?.length) {
             const card = changeList({
                 changes: t.changes,
@@ -187,9 +252,8 @@ export function createIteratePage(app) {
                 onUndo: t.historyId && app.history.canUndo(t.historyId) ? () => undoTurn(index) : null,
             });
             put(node, card.el);
-        } else if (!t.error && t.edits === 0 && t.text) {
-            // nothing
         }
+        put(node, acts);
         return node;
     }
 
@@ -290,10 +354,14 @@ export function createIteratePage(app) {
             });
             w.ai = result.live;
             const changes = diffUnits(iter().units(ws, w.base), iter().units(ws, w.ai));
-            turn = { role: 'ai', text: result.text || (changes.length ? '' : '（AI 没有改动）'), reads: result.reads.length, edits: result.edits.length, failed: result.failed.length, changes, state: changes.length ? 'pending' : '', target: w.title, at: Date.now() };
-            session = store.update(session.id, { messages: result.messages.filter(m => m.role !== 'system').slice(-60) });
+            const all = result.messages.filter(m => m.role !== 'system');
+            // Where this turn's messages start in the stored (last 60) list — 重新回答 cuts back to it.
+            const prior = messages.filter(m => m.role !== 'system').length - 1;
+            const msgKeep = Math.max(0, prior - Math.max(0, all.length - 60));
+            turn = { role: 'ai', text: result.text || (changes.length ? '' : '（AI 没有改动）'), reads: result.reads.length, edits: result.edits.length, failed: result.failed.length, changes, state: changes.length ? 'pending' : '', target: w.title, msgKeep, at: Date.now() };
+            session = store.update(session.id, { messages: all.slice(-60) });
         } catch (err) {
-            turn = { role: 'ai', text: '', error: abort.signal.aborted ? '已停止。' : `没改成：${err?.message || err}`, at: Date.now() };
+            turn = { role: 'ai', text: '', error: abort.signal.aborted ? '已停止。' : `没改成：${err?.message || err}`, msgKeep: (session.messages || []).length, at: Date.now() };
         }
         busy = false;
         abort = null;

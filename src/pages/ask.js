@@ -4,9 +4,9 @@
 // Right: the conversation. Each answer shows what was read and roughly how
 // much went to the model; "去改…" hands the finding to AI 迭代.
 
-import { h, put, clear, formatTokens, relativeTime } from '../util.js';
+import { h, put, clear, formatTokens, relativeTime, copyText } from '../util.js';
 import { icon } from '../icons.js';
-import { button, iconButton, checkRow } from '../ui/components.js';
+import { button, iconButton, checkRow, msgActions } from '../ui/components.js';
 import { renderMarkdown } from '../ui/markdown.js';
 import { runAsk, readsSummary } from '../model/ask.js';
 import { createSessionStore, titleFrom } from '../model/sessions.js';
@@ -128,7 +128,8 @@ export function createAskPage(app) {
                 h('b', { text: '想知道什么，直接问' }),
                 h('div', { text: '比如「这条回复为什么等了这么久」「为什么她忘了昨天的约定」「哪个插件最费 token」。问问会自己去翻请求、日志、角色卡和记忆图。' })));
         }
-        for (const t of turns) put(body, t.role === 'user' ? h('div', { class: 'wb-msg-me', text: t.text }) : answerBlock(t));
+        if (session?.forkedFrom) put(body, h('div', { class: 'wb-fork-note', text: `从「${session.forkedFrom}」分出来的对话` }));
+        turns.forEach((t, i) => put(body, t.role === 'user' ? userBlock(t, i) : answerBlock(t, i)));
         if (busy) {
             put(body, h('div', { class: 'wb-msg-ai' },
                 h('div', { class: 'wb-reads is-live' }, h('span', { class: 'wb-spinner', 'aria-hidden': 'true' }),
@@ -139,8 +140,57 @@ export function createAskPage(app) {
         paintOpts();
     }
 
-    function answerBlock(t) {
+    // ----- message actions ------------------------------------------------
+    const isLast = (i) => i === (session?.turns?.length || 0) - 1;
+
+    function userBlock(t, i) {
+        return h('div', { class: 'wb-msg-turn' },
+            h('div', { class: 'wb-msg-me', text: t.text }),
+            msgActions([
+                { iconName: 'copy', label: '复制', done: '已复制', onClick: () => copyText(t.text) },
+                { iconName: 'edit', label: '改了再问', title: '在新的分支里改这个问题，原对话不动', disabled: busy, onClick: () => editQuestion(i) },
+            ]));
+    }
+
+    function answerText(t) {
+        return t.error || [t.answer, t.fixPrompt ? `\n建议去「${WS_NAME[t.suggest] || ''}」改：${t.fixPrompt}` : ''].join('').trim();
+    }
+
+    /** New session holding turns [0, upto). */
+    function forkAt(upto) {
+        const src = session;
+        const turns = src.turns.slice(0, upto);
+        session = store.create({ kind: 'ask', title: `${src.title}（分支）`, forkedFrom: src.title, turns });
+        steps = [];
+        paintHead();
+        paintBody();
+        return session;
+    }
+
+    function editQuestion(i) {
+        const text = session.turns[i].text;
+        forkAt(i);
+        input.value = text;
+        grow();
+        input.focus();
+    }
+
+    function regenerate() {
+        const turns = session.turns;
+        const q = turns[turns.length - 2];
+        if (busy || !q || q.role !== 'user') return;
+        session = store.update(session.id, { turns: turns.slice(0, -2) });
+        input.value = q.text;
+        send();
+    }
+
+    function answerBlock(t, i) {
         const reads = readsSummary(t.reads || []);
+        const acts = msgActions([
+            { iconName: 'copy', label: '复制', done: '已复制', disabled: !answerText(t), onClick: () => copyText(answerText(t)) },
+            isLast(i) ? { iconName: 'refresh', label: '重新回答', disabled: busy, onClick: () => regenerate() } : null,
+            { iconName: 'fork', label: '从这里分支', title: '复制到这一条为止，开一个新对话接着问', disabled: busy, onClick: () => { forkAt(i + 1); app.toast('已分出新对话，原对话还在「之前的对话」里'); input.focus(); } },
+        ]);
         return h('div', { class: 'wb-msg-ai' },
             reads ? h('div', { class: 'wb-reads' }, icon('eye', { size: 12 }), h('span', { text: `看了 ${reads}` })) : null,
             t.error ? h('div', { class: 'wb-msg-error', text: t.error }) : renderMarkdown(t.answer),
@@ -151,7 +201,8 @@ export function createAskPage(app) {
                 h('ul', null,
                     h('li', { text: '问题和一份概况（聊天、预设、提示词占用、最近 8 次请求的状态）' }),
                     (t.reads || []).map(r => h('li', { text: `${readsSummary([r])}${r.args && Object.keys(r.args).length ? `：${JSON.stringify(r.args)}` : ''}（${r.chars.toLocaleString()} 字）` })),
-                    app.settings().ask.redact ? h('li', { text: 'API key 和接口地址已去掉' }) : null)) : null);
+                    app.settings().ask.redact ? h('li', { text: 'API key 和接口地址已去掉' }) : null)) : null,
+            acts);
     }
 
     function paintOpts() {

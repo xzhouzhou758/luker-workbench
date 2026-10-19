@@ -17,6 +17,29 @@ export function button(label, onClick, { iconName = '', className = '', disabled
         h('span', { text: label }));
 }
 
+/**
+ * Small action row under a chat message.
+ * items: { iconName, label, onClick, disabled?, done? } — `done` = text shown
+ * briefly after a successful click (e.g. 已复制).
+ */
+export function msgActions(items) {
+    return h('div', { class: 'wb-msg-acts' }, items.filter(Boolean).map((it) => {
+        const label = h('span', { text: it.label });
+        const btn = h('button', {
+            type: 'button', class: 'wb-msg-act', title: it.title || it.label, disabled: it.disabled,
+            onClick: async () => {
+                const ok = await it.onClick();
+                if (it.done && ok !== false) {
+                    label.textContent = it.done;
+                    btn.classList.add('is-done');
+                    setTimeout(() => { label.textContent = it.label; btn.classList.remove('is-done'); }, 1400);
+                }
+            },
+        }, icon(it.iconName, { size: 13 }), label);
+        return btn;
+    }));
+}
+
 export function link(label, onClick, { iconName = '' } = {}) {
     return h('button', { type: 'button', class: 'wb-link', onClick }, iconName ? icon(iconName, { size: 12 }) : null, h('span', { text: label }));
 }

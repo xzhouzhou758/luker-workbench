@@ -40,6 +40,9 @@ const PATHS = {
     refresh: 'M20 11a8 8 0 0 0-14.9-3.5M4 4v4h4M4 13a8 8 0 0 0 14.9 3.5M20 20v-4h-4',
     trash: 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
     stop: 'M7 7h10v10H7z',
+    copy: 'M9 9h10v11H9zM15 9V4H5v11h4',
+    fork: `${circle(6, 5, 2)}${circle(18, 5, 2)}${circle(12, 19, 2)}M6 7v2a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3V7M12 12v5`,
+    edit: 'M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4',
 };
 
 export function icon(name, { size = 16, className = '' } = {}) {
