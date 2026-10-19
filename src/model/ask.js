@@ -67,7 +67,7 @@ export function askTools(sources = {}) {
         text: { type: 'string', description: 'The answer in Chinese, plain and concrete. Markdown tables allowed.' },
         suggest: {
             type: 'string',
-            enum: ['', 'memory', 'orch', 'preset', 'card'],
+            enum: ['', 'memory', 'orch', 'preset', 'card', 'world'],
             description: 'If fixing this needs editing one workbench, name it so the user can jump there.',
         },
         fix_prompt: { type: 'string', description: 'If suggest is set: what to ask that workbench\'s AI to change, in Chinese.' },

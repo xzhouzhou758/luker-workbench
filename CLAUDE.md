@@ -1,11 +1,11 @@
 # CLAUDE.md — 工作台（luker-workbench）
 
-Luker 第三方扩展：一个可拖动的浮动窗口，汇总四个 AI 工作台（记忆图、编排、预设、角色卡）。姊妹项目 memory-lens、orchestra-lens（`../`），风格和约定沿用它们。当前版本 0.1.2（待真机验收）。
+Luker 第三方扩展：一个可拖动的浮动窗口，汇总五个 AI 工作台（记忆图、编排、预设、角色卡、世界书）。姊妹项目 memory-lens、orchestra-lens（`../`），风格和约定沿用它们。当前版本 0.2.0（待真机验收）。
 
 ## 用户的硬性要求
 
 1. 全中文界面（快捷键名除外），简单友好，不暴露技术参数。
-2. 风格：石墨灰、青绿 `#3fd0b4`、琥珀 = 需要注意；四个工作台色：记忆图琥珀、编排紫、预设蓝、角色卡珊瑚。手写 SVG 图标，不用 emoji、不照搬第三方。
+2. 风格：石墨灰、青绿 `#3fd0b4`、琥珀 = 需要注意；四个工作台色：记忆图琥珀、编排紫、预设蓝、角色卡珊瑚、世界书黄绿（--wb-t-world）。手写 SVG 图标，不用 emoji、不照搬第三方。
 3. 窗口化（不满屏）；手机上是底部抽屉。**不打开原生工作台**。
 4. 测试由用户在真机做；我只跑 `npm test` 和预览不报错，别反复截图。
 5. 不改用户的生成预设（含破限），只选用。群聊当「未选择角色卡」。
@@ -61,6 +61,9 @@ docs/                  接口调查与取舍.md、给原作者的接口问题.md
 
 - 每个适配器：load(scope) → live；tools/isRead/runRead/runEdit；units(live) 切成单元；rebuild(base, ai, keys)；commit(target, base, next, keys) → { undo }。
 - 记忆图：工具和提示词全用 memory-graph schema-iteration 的（去掉控制工具，加 mg_schema_read_fields）；保存同原生（角色 = persistCharacterSchemaOverride）。
+- 世界书：Luker 没有独立的世界书迭代工作台 → 复用角色卡助手的提示词和 lorebook_* / cea_*_lorebook_* 工具（过滤掉卡片字段工具），保存走 commitLorebookOperations。全局 = chatWorldInfo.globalSelection；当前角色卡 = 主书 + getCharaAuxWorlds + 聊天绑定。只允许改已载入的书。
+- 纯文本工具协议兜底：模型输出 <function_calls> XML 但 args_json 里有裸换行导致 Luker 解析失败时，model/textcalls.js 自己解析，不把 XML 显示给用户。
+- 主题样式泄漏：Luker 给裸 code/small/select option 等加了颜色和 text-shadow，shell.css 开头统一重置。
 - 编排：原生迭代工具没导出 → 自己的 wb_orch_* 四个工具（逻辑来自 orchestra-lens edit.js），保存时只把改了的字段叠到最新存档上。
 - 预设：CPA 的工具 / 提示词 / normalizeToolCallToEdit + iterationLibrary.applyEdits；去掉 skill 工具和 preset_clone_to_new；保存 ctx.presets.save(ref, body, {select:true})。
 - 角色卡：CEA 的工具 / 提示词 / normalize；live = { character, lorebooks }（主世界书 + 绑定的书）；保存 commitCharacterEditorOperations + commitLorebookOperations。

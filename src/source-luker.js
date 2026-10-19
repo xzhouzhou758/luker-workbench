@@ -10,6 +10,7 @@
 // itemized-prompts.js, memory-graph/main.js, orchestrator run-state store.
 
 import { buildBudget } from './model/budget.js';
+import { hasTextCalls, salvageTextCalls } from './model/textcalls.js';
 
 const MG = '/scripts/extensions/memory-graph';
 const ORCH = '/scripts/extensions/orchestrator';
@@ -68,6 +69,7 @@ export const DEFAULT_SETTINGS = {
         orch: { connection: '', preset: '' },
         preset: { connection: '', preset: '' },
         card: { connection: '', preset: '' },
+        world: { connection: '', preset: '' },
         ask: { connection: '', preset: '' },
     },
     builtinPrompt: true,
@@ -248,6 +250,12 @@ function cardPart(ctx, chat) {
     return { name: c.name, avatar: c.avatar, books: [...books], pending: 0 };
 }
 
+function worldPart(ctx, card) {
+    let global = [];
+    try { global = [...(ctx.chatWorldInfo?.globalSelection || [])].map(String).filter(Boolean); } catch { global = []; }
+    return { global, character: card?.books || [] };
+}
+
 function orchPart(ctx) {
     const s = ctx.extensionSettings?.orchestrator;
     if (!s) return null;
@@ -266,7 +274,7 @@ export function connectionName(ctx = getContext()) {
 }
 
 /**
- * @returns {Promise<{ chat, memory, budget, preset, card, orch, connection, at }>}
+ * @returns {Promise<{ chat, memory, budget, preset, card, world, orch, connection, at }>}
  */
 export async function loadSnapshot() {
     const ctx = getContext();
@@ -274,12 +282,14 @@ export async function loadSnapshot() {
     const memory = await memoryPart(ctx, chat).catch(() => null);
     const [budget] = await Promise.all([budgetPart(ctx, memory?.core || 0)]);
     if (budget && memory) budget.memoryHistory = memory.coreHistory;
+    const card = cardPart(ctx, chat);
     return {
         chat,
         memory,
         budget,
         preset: presetPart(ctx),
-        card: cardPart(ctx, chat),
+        card,
+        world: worldPart(ctx, card),
         orch: orchPart(ctx),
         connection: connectionName(ctx),
         lenses: { memory: Boolean(globalThis.MemoryLens), orch: Boolean(globalThis.OrchestraLens) },
@@ -345,7 +355,7 @@ const loadProfiles = lazy('/scripts/extensions/connection-manager/profile-resolv
 
 // Each workbench's own plugin already has an 「迭代 AI」 connection + preset;
 // a row left on 「跟随」 uses that first, then the workbench default.
-const NATIVE_AI = { memory: 'memory_graph', orch: 'orchestrator', preset: 'completion_preset_assistant', card: 'character_editor_assistant' };
+const NATIVE_AI = { memory: 'memory_graph', orch: 'orchestrator', preset: 'completion_preset_assistant', card: 'character_editor_assistant', world: 'character_editor_assistant' };
 export const BUNDLED_PRESETS = ['plugin-only', 'agent-director', 'agent-non-director'];
 
 function nativeAi(role, ctx = getContext()) {
@@ -440,7 +450,14 @@ export async function aiRequest(role, { messages, tools = [], signal = null }) {
         name: String(c?.name || ''),
         args: c?.args && typeof c.args === 'object' ? c.args : {},
     }));
-    return { text: String(result?.assistantText || result?.text || '').trim(), calls };
+    const text = String(result?.assistantText || result?.text || '').trim();
+    // Plain-text tool protocol Luker could not parse (broken JSON inside
+    // <args_json>): recover the calls instead of showing raw XML.
+    if (hasTextCalls(text)) {
+        const salvaged = salvageTextCalls(text, tools.map(t => t?.function?.name).filter(Boolean));
+        return { text: salvaged.text, calls: calls.length ? calls : salvaged.calls };
+    }
+    return { text, calls };
 }
 
 /** Quick connectivity test for a role. */

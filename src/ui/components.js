@@ -5,7 +5,7 @@
 import { h } from '../util.js';
 import { icon } from '../icons.js';
 
-export const TONES = { memory: '记忆图', orch: '编排', preset: '预设', card: '角色卡' };
+export const TONES = { memory: '记忆图', orch: '编排', preset: '预设', card: '角色卡', world: '世界书' };
 
 export function iconButton(name, label, onClick, { className = '', disabled = false } = {}) {
     return h('button', { type: 'button', class: `wb-ibtn ${className}`.trim(), title: label, 'aria-label': label, disabled, onClick }, icon(name));

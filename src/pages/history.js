@@ -7,7 +7,7 @@
 import { h, put, clear, relativeTime } from '../util.js';
 import { button } from '../ui/components.js';
 
-const NAMES = { memory: '记忆图', orch: '编排', preset: '预设', card: '角色卡' };
+const NAMES = { memory: '记忆图', orch: '编排', preset: '预设', card: '角色卡', world: '世界书' };
 
 export function createHistoryPage(app) {
     const el = h('div', { class: 'wb-page' });

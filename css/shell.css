@@ -9,7 +9,14 @@
     -webkit-font-smoothing: antialiased;
     isolation: isolate;
 }
-.wbench *, .wbench *::before, .wbench *::after { box-sizing: border-box; }
+.wbench *, .wbench *::before, .wbench *::after { box-sizing: border-box; text-shadow: none; }
+/* Luker themes style bare elements (code = light text on dark, small = 70%
+ * opacity, select options = dark list). Reset them so light mode reads. */
+.wbench code, .wbench kbd, .wbench small, .wbench mark, .wbench b, .wbench strong, .wbench em, .wbench q, .wbench a { color: inherit; opacity: 1; }
+.wbench code { border: 0; line-height: inherit; white-space: pre-wrap; }
+.wbench select option { background: var(--wb-surface); color: var(--wb-text); }
+.wbench textarea { max-height: none; font-size: inherit; }
+.wbench select { margin-bottom: 0; }
 .wbench [hidden] { display: none !important; }
 .wbench button, .wbench input, .wbench select, .wbench textarea { font: inherit; color: inherit; margin: 0; }
 .wbench h1, .wbench h2, .wbench h3, .wbench p, .wbench ul, .wbench ol, .wbench figure, .wbench pre { margin: 0; padding: 0; }

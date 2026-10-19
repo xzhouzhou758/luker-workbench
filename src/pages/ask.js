@@ -12,7 +12,7 @@ import { runAsk, readsSummary } from '../model/ask.js';
 import { createSessionStore, titleFrom } from '../model/sessions.js';
 
 const CHIPS = ['这条回复为什么会这样写', '刚才为什么报错', '哪个插件最费 token', '这次发给模型的提示词里有什么', '帮我写一份问题反馈，附上调试信息'];
-const WS_NAME = { memory: '记忆图', orch: '编排', preset: '预设', card: '角色卡' };
+const WS_NAME = { memory: '记忆图', orch: '编排', preset: '预设', card: '角色卡', world: '世界书' };
 
 export function createAskPage(app) {
     const store = createSessionStore();

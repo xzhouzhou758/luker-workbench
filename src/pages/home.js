@@ -107,6 +107,7 @@ export function createHomePage(app) {
         const o = snap.orch;
         const p = snap.preset;
         const c = snap.card;
+        const wb = [...new Set([...(snap.world?.character || []), ...(snap.world?.global || [])])];
         const warn = (id) => app.suggestions().some(s => s.tone === id);
         const status = (id, installed) => !installed ? pillTag('没装', '') : warn(id) ? pillTag('有建议', 'warn') : pillTag('正常', 'ok');
         const askBtn = (ws) => button('问 AI', () => app.go('ai', { ws }), { iconName: 'spark' });
@@ -120,7 +121,7 @@ export function createHomePage(app) {
             h('div', { class: 'wb-card-acts' }, acts));
         const last = o?.last;
         const avg = o?.runs?.length ? o.runs.reduce((s, r) => s + (r.durationMs || 0), 0) / o.runs.length : 0;
-        return h('section', null, sectionTitle('四个工作台'), h('div', { class: 'wb-cards' },
+        return h('section', null, sectionTitle('五个工作台'), h('div', { class: 'wb-cards' },
             card('memory', 'memory', '记忆图', m ? `${m.scope === 'character' ? '当前角色单独的设置' : '全局设置'}` : '没有检测到记忆图', status('memory', Boolean(m)),
                 m ? [['节点', String(m.nodes)], ['常驻', formatTokens(m.core)], m.focus ? ['本次召回', formatTokens(m.focus)] : null] : [],
                 [m ? askBtn('memory') : null, lensBtn('memory', '记忆透镜')]),
@@ -132,7 +133,10 @@ export function createHomePage(app) {
                 [p ? askBtn('preset') : null]),
             card('card', 'card', '角色卡', c?.name ? `${c.name}${c.books?.length ? ` · ${c.books.length} 本世界书` : ''}` : '未选择角色卡', c?.name ? (warn('card') ? pillTag('待确认', 'warn') : pillTag('正常', 'ok')) : pillTag('未选择', ''),
                 c?.name && snap.budget ? [['设定', formatTokens(snap.budget.parts.find(x => x.key === 'card')?.tokens || 0)], ['世界书', formatTokens(snap.budget.parts.find(x => x.key === 'world')?.tokens || 0)]] : [],
-                [c?.name ? askBtn('card') : null])));
+                [c?.name ? askBtn('card') : null]),
+            card('world', 'world', '世界书', wb.length ? `${wb.length} 本 · ${wb.slice(0, 2).join('、')}${wb.length > 2 ? ' 等' : ''}` : '没有启用的世界书', wb.length ? pillTag('正常', 'ok') : pillTag('没有', ''),
+                snap.budget ? [['本次注入', formatTokens(snap.budget.parts.find(x => x.key === 'world')?.tokens || 0)]] : [],
+                [wb.length ? askBtn('world') : null])));
     }
 
     return {

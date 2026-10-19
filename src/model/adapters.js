@@ -193,3 +193,8 @@ export function cardRebuild(base, ai, accepted) {
     }
     return next;
 }
+
+// ----- world info only (live = { lorebooks }) --------------------------------
+
+export const worldUnits = (live) => new Map([...cardUnits({ lorebooks: live?.lorebooks || {} })].filter(([k]) => k.startsWith('wi:')));
+export const worldRebuild = (base, ai, accepted) => cardRebuild(base, ai, accepted.filter(k => k.startsWith('wi:')));

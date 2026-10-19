@@ -14,7 +14,7 @@
 // Native modules are imported by URL (same instances Luker already runs).
 
 import { getContext, currentCharacter, boundBooks, SourceError } from './source-luker.js';
-import { memoryUnits, memoryRebuild, orchUnits, orchRebuild, presetUnits, presetRebuild, cardUnits, cardRebuild, cardEditsFor } from './model/adapters.js';
+import { memoryUnits, memoryRebuild, orchUnits, orchRebuild, presetUnits, presetRebuild, cardUnits, cardRebuild, cardEditsFor, worldUnits, worldRebuild } from './model/adapters.js';
 import { listAgents, agentFields, getField, setField, replaceInField, validateField, FIELD_LABELS, EditError } from './model/orch-edit.js';
 import { pickUnits } from './model/units.js';
 
@@ -403,27 +403,101 @@ const card = {
     },
 };
 
-export const ADAPTERS = { memory, orch, preset, card };
+// ---------------------------------------------------------------------------
+// 世界书：只改世界书条目（角色卡助手的世界书工具 + 保存）
+//   全局 = 全局启用的世界书；当前角色卡 = 角色主书、附加书和聊天绑定的书
+// ---------------------------------------------------------------------------
+
+async function worldBookNames(ctx, scope) {
+    const names = new Set();
+    if (scope === 'global') {
+        for (const n of ctx.chatWorldInfo?.globalSelection || []) names.add(String(n));
+    } else {
+        const c = currentCharacter(ctx);
+        if (!c) throw new SourceError('no-character', '未选择角色卡');
+        const full = ctx.characters[c.index];
+        if (full?.data?.extensions?.world) names.add(String(full.data.extensions.world));
+        try { for (const n of ctx.getCharaAuxWorlds?.(String(full?.avatar || '').replace(/\.[^.]+$/, '')) || []) names.add(String(n)); } catch { /* ignore */ }
+        try { for (const n of ctx.chatWorldInfo?.getNames?.() || []) names.add(String(n)); } catch { /* ignore */ }
+    }
+    return [...names].filter(Boolean);
+}
+
+const WORLD_TOOL = /^(cea_(add|update|str_replace|remove)_lorebook_entry(_field)?|cea_set_lorebook_metadata|lorebook_(list|query|get)|world_book_list|simulate_prompt)$/;
+
+const WORLD_NOTE = (books) => [
+    '## This session edits world books only',
+    `- Books you may edit: ${books.map(b => `「${b}」`).join('、')}. Always pass book_name exactly as written here.`,
+    '- Character card fields are not editable here (the card tools are not offered). If the fix belongs on the card, say so and the user will switch to the 角色卡 workbench.',
+    '- Read before editing: lorebook_list / lorebook_query to find entries, lorebook_get for full text, then patch with cea_str_replace_lorebook_entry_field or cea_update_lorebook_entry. New entries need a uid not used in that book.',
+].join('\n');
+
+const world = {
+    name: '世界书',
+    async scopes(ctx) {
+        let global = false;
+        try { global = (await worldBookNames(ctx, 'global')).length > 0; } catch { global = false; }
+        return { global, character: Boolean(currentCharacter(ctx)) };
+    },
+    async load(scope) {
+        const ctx = getContext();
+        const names = await worldBookNames(ctx, scope);
+        if (!names.length) throw new SourceError('no-book', scope === 'global' ? '没有全局启用的世界书。先在 Luker 的世界书面板里勾选一本，再回来改。' : '这个角色还没有绑定世界书（主书、附加书、聊天绑定都没有）。');
+        const lorebooks = {};
+        for (const name of names) {
+            try { const data = await ctx.loadWorldInfo(name); if (data) lorebooks[name] = clone(data); } catch { /* skip */ }
+        }
+        const c = currentCharacter(ctx);
+        const who = scope === 'global' ? '全局启用的世界书' : `「${c?.name || '角色'}」的世界书`;
+        return { live: { lorebooks }, target: { scope, avatar: scope === 'character' ? c?.avatar || '' : '' }, title: `${who} · ${Object.keys(lorebooks).join('、')}` };
+    },
+    async prompt(live) {
+        const base = await card.prompt();
+        return [base, '', WORLD_NOTE(Object.keys(live?.lorebooks || {}))].join('\n');
+    },
+    async tools() {
+        return (await card.tools()).filter(d => WORLD_TOOL.test(fnName(d)));
+    },
+    isRead: (name) => /^(lorebook_|world_book_|simulate_)/.test(name),
+    async runRead(call, live) {
+        if (call.name === 'world_book_list') return { books: Object.keys(live?.lorebooks || {}) };
+        return card.runRead(call, live);
+    },
+    async runEdit(call, live) {
+        const book = String(call.args?.book_name || '').trim();
+        if (!book || !live?.lorebooks?.[book]) throw new SourceError('book', `只能改这几本：${Object.keys(live?.lorebooks || {}).join('、')}`);
+        const next = await card.runEdit(call, { character: {}, lorebooks: live.lorebooks });
+        return { lorebooks: next.lorebooks };
+    },
+    units: (live) => worldUnits(live),
+    rebuild: (base, ai, keys) => worldRebuild(base, ai, keys),
+    async commit(target, base, next, keys) {
+        return card.commit({ avatar: target.avatar }, { character: {}, ...base }, { character: {}, ...next }, keys.filter(k => k.startsWith('wi:')));
+    },
+};
+
+export const ADAPTERS = { memory, orch, preset, card, world };
 
 const PROMPT_SOURCES = {
     memory: ['记忆图', 'schemaIterSystemPrompt', '记忆图设置里的「Schema 迭代系统提示词」'],
     orch: ['编排', 'requestSystemPrompt', '编排设置里的「AI 迭代系统提示词」（通用部分；工作台另附自己的工具说明）'],
     preset: ['预设助手', 'iterBaseSystemPrompt', '预设助手设置里的「迭代基础提示词」'],
     card: ['角色卡助手', 'editorIterationSystemPrompt', '角色卡助手设置里的「编辑迭代提示词」'],
+    world: ['角色卡助手', 'editorIterationSystemPrompt', '角色卡助手设置里的「编辑迭代提示词」（Luker 没有单独的世界书迭代提示词；工作台只开放世界书工具，并附上可改的书名）'],
 };
 
 /** Which Luker prompt a workbench uses, and whether the user customised it. */
 export async function promptInfo(ws) {
     const [, key, where] = PROMPT_SOURCES[ws];
-    const live = ws === 'orch' ? { mode: 'spec', profile: {} } : null;
+    const live = ws === 'orch' ? { mode: 'spec', profile: {} } : ws === 'world' ? { lorebooks: {} } : null;
     const text = await ADAPTERS[ws].prompt(live);
-    const plugin = { memory: 'memory_graph', orch: 'orchestrator', preset: 'completion_preset_assistant', card: 'character_editor_assistant' }[ws];
+    const plugin = { memory: 'memory_graph', orch: 'orchestrator', preset: 'completion_preset_assistant', card: 'character_editor_assistant', world: 'character_editor_assistant' }[ws];
     const stored = String(getContext().extensionSettings?.[plugin]?.[key] || '').trim();
     let custom = false;
     if (ws === 'orch') custom = (await orchBasePrompt()).custom;
     else if (ws === 'memory') { const sp = await load(`${MG}/schema-iteration/system-prompt.js`).catch(() => null); custom = Boolean(stored) && stored !== String(sp?.DEFAULT_SCHEMA_ITER_SYSTEM_PROMPT || '').trim(); }
     else if (ws === 'preset') { const sp = await load(`${CPA}/cpa-iteration/system-prompts.js`).catch(() => null); custom = Boolean(stored) && stored !== String(sp?.buildBaseSystemPrompt?.() || '').trim(); }
-    else if (ws === 'card') { const st = await load(`${CEA}/editor-iteration/studio.js`).catch(() => null); custom = Boolean(stored) && stored !== String(st?.DEFAULT_SYSTEM_PROMPT || '').trim(); }
+    else if (ws === 'card' || ws === 'world') { const st = await load(`${CEA}/editor-iteration/studio.js`).catch(() => null); custom = Boolean(stored) && stored !== String(st?.DEFAULT_SYSTEM_PROMPT || '').trim(); }
     return { from: `Luker 内置 · ${where}`, custom, text };
 }
 

@@ -14,6 +14,7 @@ const ROWS = [
     { key: 'orch', label: '编排', tone: 'orch' },
     { key: 'preset', label: '预设', tone: 'preset' },
     { key: 'card', label: '角色卡', tone: 'card' },
+    { key: 'world', label: '世界书', tone: 'world' },
 ];
 const SOURCES = [
     { key: 'inspector', name: '请求检查器', note: '最近 200 次请求的完整内容、用时、状态' },
@@ -142,7 +143,7 @@ export function createSettingsPage(app) {
 
     let prompts = null;
     async function loadPrompts() {
-        const roles = ['ask', 'memory', 'orch', 'preset', 'card'];
+        const roles = ['ask', 'memory', 'orch', 'preset', 'card', 'world'];
         const out = {};
         for (const r of roles) {
             try { out[r] = await app.source.promptInfo(r); } catch (err) { out[r] = { from: '读不到', custom: false, text: String(err?.message || err) }; }

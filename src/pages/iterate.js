@@ -6,7 +6,7 @@
 // the workbench's own save path) and records an undoable history entry.
 //
 // Scope rules: 记忆图 / 编排 = 全局 or 当前角色卡; 预设 = 全局 only;
-// 角色卡 = 当前角色卡 only. No character (or a group chat) = 未选择角色卡.
+// 角色卡 = 当前角色卡 only; 世界书 = 全局启用的书 or 当前角色的书. No character (or a group chat) = 未选择角色卡.
 
 import { h, put, clear, relativeTime } from '../util.js';
 import { icon } from '../icons.js';
@@ -22,6 +22,7 @@ const WS = [
     { value: 'orch', label: '编排', tone: 'orch' },
     { value: 'preset', label: '预设', tone: 'preset' },
     { value: 'card', label: '角色卡', tone: 'card' },
+    { value: 'world', label: '世界书', tone: 'world' },
 ];
 const WS_NAME = Object.fromEntries(WS.map(w => [w.value, w.label]));
 const CHIPS = {
@@ -29,12 +30,14 @@ const CHIPS = {
     orch: ['最近一次运行哪里慢', '这个助手的提示词能更短吗', '让审稿更严格一点', '换一个更快的连接给最慢的助手'],
     preset: ['找出互相矛盾的要求', '精简文风条目', '回复太长了，改哪里', '这条回复不像角色，查查预设'],
     card: ['这条回复不像她，帮我找原因', '精简设定，去掉重复的描述', '补几段示例对话', '检查世界书有没有冲突'],
+    world: ['找出互相矛盾或重复的条目', '这个条目为什么没触发', '帮我补几个关键词', '把太长的条目拆开或精简'],
 };
 const SCOPE_NOTE = {
     memory: { global: '改所有角色共用的记忆结构', character: '只改这个角色单独的记忆结构（没有的话保存时新建一份）' },
     orch: { global: '改所有角色共用的编排方案', character: '只改这个角色单独的编排方案' },
     preset: { global: '预设不分角色，改的是当前选中的预设' },
     card: { character: '改这个角色的角色卡和绑定的世界书' },
+    world: { global: '改全局启用的世界书（所有聊天都生效）', character: '改这个角色的主书、附加书和当前聊天绑定的书' },
 };
 
 export function createIteratePage(app) {
@@ -76,7 +79,7 @@ export function createIteratePage(app) {
         if (scope === 'character' && !a.character) scope = a.global ? 'global' : 'character';
         if (scope === 'global' && !a.global) scope = 'character';
     }
-    const blocked = () => ws === 'card' && !allowedScopes().character;
+    const blocked = () => (ws === 'card' && !allowedScopes().character) || (ws === 'world' && !allowedScopes().character && !allowedScopes().global);
 
     // ----- sessions -------------------------------------------------------
     const sessions = () => store.list('iterate');
@@ -139,7 +142,7 @@ export function createIteratePage(app) {
                 { value: 'global', label: '全局', iconName: 'globe', hidden: ws === 'card', disabled: !a.global || (locked && scope !== 'global') },
                 { value: 'character', label: name ? `当前角色卡「${name}」` : '未选择角色卡', iconName: 'card', hidden: ws === 'preset', disabled: !a.character || (locked && scope !== 'character') },
             ], scope, (v) => { scope = v; session = null; paintAll(); }, { ariaLabel: '改哪一份', className: 'wb-scope-seg' }),
-            h('span', { class: 'wb-scope-note', text: blocked() ? '' : !name && ws !== 'preset' && ws !== 'card' ? '没选角色卡，只能改全局的' : SCOPE_NOTE[ws][scope] || '' }));
+            h('span', { class: 'wb-scope-note', text: blocked() ? '' : !name && ws !== 'preset' && ws !== 'card' && scope === 'global' ? '没选角色卡，只能改全局的' : SCOPE_NOTE[ws][scope] || '' }));
     }
 
     // ----- body -----------------------------------------------------------
@@ -147,7 +150,7 @@ export function createIteratePage(app) {
         clear(body);
         if (blocked()) {
             put(body, h('div', { class: 'wb-empty' }, icon('card', { size: 28 }), h('b', { text: '未选择角色卡' }),
-                h('div', { text: '角色卡没有全局的一份。先在 Luker 里打开一个角色的聊天（群聊不行），再回来改。记忆图、编排、预设可以照常改全局的。' })));
+                h('div', { text: ws === 'world' ? '没有全局启用的世界书，也没有打开角色聊天。先在世界书面板勾选一本全局的，或打开一个角色的聊天（群聊不行）。' : '角色卡没有全局的一份。先在 Luker 里打开一个角色的聊天（群聊不行），再回来改。记忆图、编排、预设可以照常改全局的。' })));
             composer.hidden = true;
             return;
         }
